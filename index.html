@@ -169,6 +169,40 @@ form.fields label.check input{width:20px;height:20px;margin-top:2px;accent-color
 .gate{text-align:center;max-width:520px;margin:10px auto 0}
 .gate h2{font-family:var(--display);font-weight:400;font-size:2.2rem;margin:0 0 8px}
 .gate p{margin:0 0 18px;font-weight:600}
+.btn.link{border:none;background:none;box-shadow:none;padding:4px 6px;text-decoration:underline;text-underline-offset:3px;color:var(--muted);font-weight:700}
+.btn.link:hover{transform:none;box-shadow:none;color:var(--ink)}
+.rate{display:inline-block;margin-top:4px;font-size:.85rem;font-weight:800;color:var(--accent)}
+.card .txt .rate{color:var(--accent);margin:0 0 6px}
+.dtabs{display:flex;gap:8px}
+.dtabs button{border:3px solid var(--line);background:transparent;padding:6px 16px;border-radius:999px;font-weight:800;cursor:pointer;color:var(--ink)}
+.dtabs button[aria-selected="true"]{background:var(--line);color:#fff}
+.reviews{display:flex;flex-direction:column;gap:16px}
+.rv-sum{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.rv-sum .big{font-family:var(--display);font-size:2.6rem;line-height:1}
+.stars{color:#FF9F1C;letter-spacing:.08em;font-size:1.05rem}
+.rv-form{padding:14px;border:3px dashed var(--line);border-radius:14px}
+.star-pick{display:flex;gap:2px}
+.star-pick button{border:none;background:none;font-size:2rem;line-height:1;color:#FF9F1C;cursor:pointer;padding:0 2px}
+.star-pick button:hover{transform:scale(1.15)}
+.rv-list{display:flex;flex-direction:column;gap:12px}
+.rv{padding:12px 14px;border-radius:14px;background:var(--chip)}
+.rv.mine{outline:3px solid var(--accent)}
+.rv header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rv header time{margin-left:auto;color:var(--muted);font-size:.85rem;font-weight:600}
+.rv p{margin:6px 0 0;white-space:pre-wrap}
+.rv .tag{font-size:.72rem;font-weight:800;background:var(--line);color:#fff;padding:2px 8px;border-radius:999px}
+.rv-acts{display:flex;gap:4px;justify-content:flex-end}
+.btn.wa{background:#25D366;color:#fff;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.nudge{display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:14px;background:#E9FBEF;border:3px solid #25D366}
+.nudge.soft{background:none;border:none;padding:0;align-items:flex-start}
+.nudge span{font-weight:600}
+.nudge .btn.wa{align-self:flex-start}
+.alerts{background:var(--panel);border:3px solid var(--accent);border-radius:18px;box-shadow:5px 5px 0 var(--shadow);padding:16px 18px;margin-bottom:22px}
+.alerts h2{font-family:var(--display);font-weight:400;font-size:1.6rem;margin:0 0 10px;color:var(--accent)}
+.alert-row{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;text-align:left;border:none;background:var(--chip);border-radius:12px;padding:10px 14px;margin-bottom:8px;font-weight:700;cursor:pointer;color:var(--ink)}
+.alert-row:hover{outline:3px solid var(--line)}
+.alert-row .go{white-space:nowrap;color:var(--accent);font-weight:800}
+.alert-extras{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-top:6px;font-weight:600}
 </style>
 </head>
 <body>
@@ -194,6 +228,7 @@ form.fields label.check input{width:20px;height:20px;margin-top:2px;accent-color
   </div>
   <div id="app">
   <div id="notice" class="notice" hidden></div>
+  <div id="alerts" hidden></div>
 
   <nav class="tabs" role="tablist">
     <button role="tab" id="tabShelf" aria-selected="true" type="button">Shelf</button>
@@ -244,7 +279,7 @@ const ALLOWED_DOMAIN = "";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, collection, getDoc, updateDoc, setDoc, deleteDoc, addDoc, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, collection, collectionGroup, getDoc, updateDoc, setDoc, deleteDoc, addDoc, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -256,10 +291,19 @@ const firestoreDb = {
     update: d => updateDoc(r, d), set: d => setDoc(r, d), delete: () => deleteDoc(r) }; },
   collection: p => { const c = collection(fs, p); return {
     add: d => addDoc(c, d),
-    limit: n => ({ onSnapshot: (next, err) => onSnapshot(query(c, limit(n)), s => next({ docs: s.docs.map(wrapSnap) }), err) }) }; }
+    limit: n => ({ onSnapshot: (next, err) => onSnapshot(query(c, limit(n)), s => next({ docs: s.docs.map(wrapSnap) }), err) }) }; },
+  group: name => ({ onSnapshot: (next, err) => onSnapshot(query(collectionGroup(fs, name), limit(3000)), s => next({ docs: s.docs.map(wrapSnap) }), err) })
 };
 
-const GENRES = ["Fiction","Non-fiction","Business & marketing","Design & art","Poetry","Self-help","Biography & memoir","History & politics","Other"];
+const GENRES = [
+  "Fiction","Literary fiction","Classics","Indian writing","Mystery & thriller","Crime","Fantasy","Science fiction",
+  "Romance","Horror","Young adult","Graphic novels & comics","Manga","Short stories","Poetry","Plays & screenplays",
+  "Non-fiction","Biography & memoir","History","Politics & current affairs","Philosophy","Psychology","Self-help",
+  "Business & strategy","Marketing & advertising","Branding","Economics & finance","Entrepreneurship & startups",
+  "Design & art","Photography & film","Media & communication","Journalism","Culture & society","Gender & identity",
+  "Science & nature","Technology & AI","Health & wellness","Sports","Travel","Food & cooking","Mythology",
+  "Religion & spirituality","Language & writing","Other"
+];
 const SPINES = [
   ["#FF5A36","#FFF6E0","#FFD447"],["#2340FF","#FFFFFF","#FF8FC7"],["#00A88F","#FFFFFF","#FFD447"],
   ["#FF3E8A","#FFFFFF","#3B2E8F"],["#6B3BFF","#FFFFFF","#7CF3D6"],["#FFC93C","#3B2E8F","#FF5A36"],
@@ -284,6 +328,7 @@ function coverEl(b, size){
 const LOAN_DAYS = 14;
 
 const state = {
+  reviews:{}, reviewsError:false, bookTab:"about", reviewEditing:null,
   db:null, user:null, uid:null, canWrite:true, readOnly:false,
   books:[], profile:null, openId:null, tab:"shelf", loaded:false
 };
@@ -312,12 +357,13 @@ function toast(msg){
 function notice(msg){ const n=$("#notice"); if(!msg){n.hidden=true;return;} n.textContent=msg; n.hidden=false; }
 
 /* ---------- data ---------- */
-let unsubBooks = null;
+let unsubBooks = null, unsubReviews = null;
 async function boot(){
   renderShelf();
   state.db = firestoreDb;
   onAuthStateChanged(auth, async u => {
     if (unsubBooks){ unsubBooks(); unsubBooks = null; }
+    if (unsubReviews){ unsubReviews(); unsubReviews = null; }
     if (!u){
       state.uid = null; state.profile = null; state.books = []; state.loaded = false;
       $("#gate").hidden = false; $("#app").hidden = true; $("#signOut").hidden = true; return;
@@ -341,6 +387,11 @@ async function boot(){
         ? "Your account can't read the shelf. Check the Firestore rules (README step 3)."
         : "Live updates stopped. Reload the page to reconnect.");
     });
+    unsubReviews = state.db.group("reviews").onSnapshot(snap=>{
+      const m = {};
+      snap.docs.forEach(d=>{ const r = d.data(); if (r && r.bookId) (m[r.bookId] = m[r.bookId] || []).push(r); });
+      state.reviews = m; state.reviewsError = false; renderAll();
+    }, err=>{ state.reviewsError = true; renderAll(); });
     renderAll();
   });
 }
@@ -367,8 +418,8 @@ const bookRef = id => state.db.doc("books/" + id);
 
 /* ---------- render ---------- */
 function renderAll(){
-  renderShelf(); renderMine(); renderBadge(); renderButtons();
-  if (state.openId && $("#dlg").open && $("#dlg").dataset.kind==="book"){
+  renderShelf(); renderMine(); renderBadge(); renderButtons(); renderAlerts();
+  if (state.openId && $("#dlg").open && $("#dlg").dataset.kind==="book" && state.reviewEditing!==state.openId){
     const b = state.books.find(x=>x.id===state.openId);
     if (b) fillBook(b); else $("#dlg").close();
   }
@@ -381,13 +432,20 @@ function renderButtons(){
 (function initFilters(){
   const s = $("#genreFilter");
   s.append(el("option",{value:"",text:"All genres"}));
-  GENRES.forEach(g=>s.append(el("option",{value:g,text:g})));
   ["input","change"].forEach(ev=>{
     $("#q").addEventListener(ev,renderShelf); s.addEventListener(ev,renderShelf); $("#availOnly").addEventListener(ev,renderShelf);
   });
 })();
 
+function buildGenreFilter(){
+  const s = $("#genreFilter"), cur = s.value, counts = {};
+  state.books.forEach(b=>{ if (b.genre) counts[b.genre] = (counts[b.genre]||0)+1; });
+  const names = Object.keys(counts).sort((a,b)=>a.localeCompare(b));
+  s.replaceChildren(el("option",{value:"",text:"All genres"}), ...names.map(g=>el("option",{value:g,text:`${g} (${counts[g]})`})));
+  s.value = names.includes(cur) ? cur : "";
+}
 function renderShelf(){
+  buildGenreFilter();
   const box = $("#shelf"); box.replaceChildren();
   if (!state.loaded){ box.append(el("div",{class:"empty"},[el("strong",{text:"Opening the shelf…"})])); return; }
   const q = $("#q").value.trim().toLowerCase(), g = $("#genreFilter").value, availOnly = $("#availOnly").checked;
@@ -431,6 +489,17 @@ function renderShelf(){
   }
   box.append(shelf);
 }
+function reviewsFor(id){ return (state.reviews[id]||[]).slice().sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0)); }
+function ratingStats(revs){ const r = revs.filter(x=>x.rating>0); return {count:r.length, avg: r.length ? r.reduce((s,x)=>s+x.rating,0)/r.length : 0}; }
+const starsText = n => { const k = Math.round(n); return "★".repeat(k) + "☆".repeat(5-k); };
+function rateLine(id){
+  const revs = reviewsFor(id), st = ratingStats(revs);
+  if (!revs.length) return null;
+  const parts = [];
+  if (st.count) parts.push(`★ ${st.avg.toFixed(1)}`);
+  parts.push(`${revs.length} review${revs.length>1?"s":""}`);
+  return el("span",{class:"rate",text:parts.join(" · ")});
+}
 function renderFresh(){
   const f = $("#fresh"); f.replaceChildren();
   const fresh = state.books.filter(b=>b.status==="available").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,3);
@@ -438,12 +507,74 @@ function renderFresh(){
   const grid = el("div",{class:"covers"});
   fresh.forEach(b=>grid.append(el("button",{class:"card",type:"button",onclick:()=>openBook(b.id),"aria-label":`${b.title}, available`},[
     coverEl(b,"sm"),
-    el("div",{class:"txt"},[el("b",{text:b.title}), el("span",{text:`from ${b.ownerName||"a MICA reader"}`}), b.note?el("p",{text:b.note}):null])
+    el("div",{class:"txt"},[el("b",{text:b.title}), el("span",{text:`from ${b.ownerName||"a MICA reader"}`}), rateLine(b.id), b.note?el("p",{text:b.note}):null])
   ])));
   f.append(el("section",{class:"fresh"},[el("h2",{text:"Fresh on the shelf"}), grid]));
 }
 function statusWord(b){
   return {available:"available",requested:"requested",borrowed:"borrowed",returning:"being returned"}[b.status]||"available";
+}
+
+function waNumber(p){
+  let d = (p||"").replace(/\D/g,"");
+  if (d.length===11 && d.startsWith("0")) d = d.slice(1);
+  if (d.length===10) d = "91" + d;
+  return d.length>=11 && d.length<=15 ? d : "";
+}
+function waBtn(phone, label, msg){
+  const n = waNumber(phone);
+  return n ? el("a",{class:"btn wa",href:`https://wa.me/${n}?text=${encodeURIComponent(msg)}`,target:"_blank",rel:"noopener",text:label}) : null;
+}
+const SITE = location.origin.startsWith("http") ? location.host : "the MICA Shelf";
+function myPlace(){ return state.profile ? `${state.profile.name}, ${where(state.profile.block,state.profile.room)}` : ""; }
+
+function alertText(b){
+  if (b.ownerAlert) return b.ownerAlert;
+  if (b.status==="requested") return `${b.borrowerName||"Someone"} wants to borrow "${b.title}"`;
+  if (b.status==="returning") return `${b.borrowerName||"Your borrower"} says they've returned "${b.title}". Confirm it's back.`;
+  const wl = b.waitlist||[];
+  if (b.status==="available" && wl.length) return `${wl[0].name} is waiting for "${b.title}". Lend it to them when you can.`;
+  return "";
+}
+const alertKey = b => [b.id,b.status,b.borrowerId||"",b.ownerAlert||"",((b.waitlist||[])[0]||{}).id||""].join("|");
+const seenAlerts = new Set(); let alertsSeeded = false;
+
+function renderAlerts(){
+  const box = $("#alerts"); box.replaceChildren();
+  if (!state.uid || !state.loaded){ box.hidden = true; document.title = "The MICA Shelf"; return; }
+  const items = state.books.filter(needsOwner);
+  document.title = items.length ? `(${items.length}) The MICA Shelf` : "The MICA Shelf";
+
+  // pop a device notification for anything new since the page loaded
+  const keys = items.map(alertKey);
+  if (alertsSeeded && "Notification" in window && Notification.permission==="granted"){
+    items.forEach((b,i)=>{ if (!seenAlerts.has(keys[i])){
+      try{ const n = new Notification("The MICA Shelf", {body: alertText(b), tag: b.id}); n.onclick = ()=>{ window.focus(); openBook(b.id); n.close(); }; }catch(e){}
+    }});
+  }
+  keys.forEach(k=>seenAlerts.add(k)); alertsSeeded = true;
+
+  const ownsBooks = state.books.some(b=>b.ownerId===state.uid);
+  const noPhone = ownsBooks && !(state.profile && state.profile.phone);
+  const canAsk = "Notification" in window && Notification.permission==="default";
+  if (!items.length && !noPhone) { box.hidden = true; return; }
+
+  const panel = el("div",{class:"alerts"});
+  if (items.length){
+    panel.append(el("h2",{text: items.length===1 ? "1 thing needs you" : `${items.length} things need you`}));
+    items.forEach(b=>panel.append(el("button",{class:"alert-row",type:"button",onclick:()=>openBook(b.id)},[
+      el("span",{text:alertText(b)}), el("span",{class:"go",text:"Open →"})
+    ])));
+  }
+  const extras = el("div",{class:"alert-extras"});
+  if (noPhone) extras.append(el("span",{},["Add your WhatsApp number so borrowers can message you. ",
+    el("button",{class:"btn link",type:"button",text:"Add it in Your details",onclick:()=>openProfile()})]));
+  if (canAsk && items.length) extras.append(el("button",{class:"btn",type:"button",text:"Alert me on this device",onclick:async()=>{
+    try{ const r = await Notification.requestPermission(); toast(r==="granted" ? "You'll get alerts while the shelf is open in a tab" : "Alerts are off for this browser"); }catch(e){}
+    renderAlerts();
+  }}));
+  if (extras.children.length) panel.append(extras);
+  box.append(panel); box.hidden = false;
 }
 
 function needsOwner(b){
@@ -522,19 +653,22 @@ $("#tabMine").onclick=()=>setTab("mine");
 
 /* ---------- dialogs ---------- */
 function showDialog(kind){ const d=$("#dlg"); d.dataset.kind=kind; if(!d.open) d.showModal(); }
-$("#dlg").addEventListener("close",()=>{ state.openId=null; });
+$("#dlg").addEventListener("close",()=>{ state.openId=null; state.reviewEditing=null; });
 $("#dlg").addEventListener("click",e=>{ if(e.target.id==="dlg") $("#dlg").close(); });
 const closeBtn = () => el("button",{class:"close",type:"button","aria-label":"Close",onclick:()=>$("#dlg").close(),text:"×"});
 
-function openBook(id){
+function refill(id){ const x = state.books.find(y=>y.id===id); if (x) fillBook(x); }
+function openBook(id, tab){
   const b = state.books.find(x=>x.id===id); if(!b) return;
+  if (state.openId !== id || tab) state.bookTab = tab || "about";
+  state.reviewEditing = null;
   state.openId = id; fillBook(b); showDialog("book");
   if (b.ownerAlert && b.ownerId===state.uid && state.canWrite && !state.readOnly){
     bookRef(b.id).update({ownerAlert:null}).catch(()=>{});
   }
 }
 
-const me_ = () => ({id:state.uid, name:state.profile.name, block:state.profile.block||"", room:state.profile.room||"", at:Date.now()});
+const me_ = () => ({id:state.uid, name:state.profile.name, block:state.profile.block||"", room:state.profile.room||"", phone:state.profile.phone||"", at:Date.now()});
 const trim = j => (j||[]).slice(-40);
 
 /* Fetch the latest copy before changing the queue or holder, so two people acting at once don't clobber each other. */
@@ -543,7 +677,7 @@ async function fresh(b){ const s = await bookRef(b.id).get(); return s.exists ? 
 async function lendTo(b, p, kind, fromName){
   const cur = await fresh(b); if(!cur){ toast("That book was removed."); return; }
   const wl = (cur.waitlist||[]).filter(x=>x.id!==p.id);
-  const fields = {status:"borrowed", borrowerId:p.id, borrowerName:p.name, borrowerBlock:p.block||"", borrowerRoom:p.room||"",
+  const fields = {status:"borrowed", borrowerId:p.id, borrowerName:p.name, borrowerBlock:p.block||"", borrowerRoom:p.room||"", borrowerPhone:p.phone||"",
     requestedAt:null, borrowedAt:Date.now(), dueAt:Date.now()+LOAN_DAYS*864e5, waitlist:wl,
     journey:trim([...(cur.journey||[]), {kind, from:fromName, to:p.name, at:Date.now()}])};
   if (kind==="passed"){
@@ -573,9 +707,14 @@ function fillBook(b){
 
   body.append(el("div",{class:"dlg-head"},[
     coverEl(b,"lg"),
-    el("div",{},[el("h2",{text:b.title}), el("p",{class:"by",text:[b.author, b.genre].filter(Boolean).join(", ")})]),
+    el("div",{},[el("h2",{text:b.title}), el("p",{class:"by",text:[b.author, b.genre].filter(Boolean).join(", ")}), rateLine(b.id)]),
     closeBtn()
   ]));
+  const revs = reviewsFor(b.id);
+  const tabBtn = (key, label) => el("button",{type:"button",role:"tab","aria-selected":String(state.bookTab===key),
+    onclick:()=>{ state.bookTab=key; state.reviewEditing=null; refill(b.id); }, text:label});
+  body.append(el("div",{class:"dtabs",role:"tablist"},[tabBtn("about","About"), tabBtn("reviews", `Reviews${revs.length?` (${revs.length})`:""}`)]));
+  if (state.bookTab==="reviews"){ renderReviews(body, b, revs); return; }
   if (b.note) body.append(el("p",{class:"note",text:b.note}));
   body.append(el("dl",{class:"facts"},[
     el("dt",{text:"Owner"}), el("dd",{text:isOwner ? "You" : (b.ownerName||"A MICA reader")}),
@@ -601,6 +740,32 @@ function fillBook(b){
   if (b.status==="returning") line = isOwner ? `${b.borrowerName||"The borrower"} says they've returned it. Confirm once it's back with you.`
      : isHolder ? "Marked as returned. Waiting for the owner to confirm." : "On its way back to the owner.";
   body.append(el("div",{class:"status-line"},[el("b",{text:"Where it is: "}), line]));
+
+  // Message the right person on WhatsApp
+  const T = `"${b.title}"`;
+  let nudge = null;
+  if (isHolder && b.status==="requested"){
+    const btn = waBtn(b.ownerPhone, `Message ${b.ownerName||"the owner"} on WhatsApp`,
+      `Hi ${b.ownerName||""}! I've asked to borrow ${T} on The MICA Shelf (${SITE}). When can I come pick it up? – ${myPlace()}`);
+    nudge = el("div",{class:"nudge"},[
+      el("b",{text:"One more step: let them know"}),
+      el("span",{text: btn ? `${b.ownerName||"The owner"} sees your request when they open the shelf. A quick message makes sure they don't miss it.`
+                           : `${b.ownerName||"The owner"} hasn't added a WhatsApp number yet. They'll see your request when they open the shelf, or drop by ${where(b.ownerBlock,b.ownerRoom)}.`}),
+      btn]);
+  } else if (isOwner && (b.status==="requested" || b.status==="returning")){
+    const btn = waBtn(b.borrowerPhone, `Message ${b.borrowerName||"them"} on WhatsApp`,
+      b.status==="requested" ? `Hi ${b.borrowerName||""}! Saw your request for ${T} on The MICA Shelf. You can pick it up from ${where(b.ownerBlock,b.ownerRoom)}. When works for you?`
+                             : `Hi ${b.borrowerName||""}! About ${T} from The MICA Shelf: I haven't got it back yet. Where did you leave it?`);
+    if (btn) nudge = el("div",{class:"nudge soft"},[btn]);
+  } else if (next && ((isHolder && b.status==="borrowed" && passOn) || (isOwner && b.status==="available"))){
+    const btn = waBtn(next.phone, `Message ${next.name} on WhatsApp`,
+      `Hi ${next.name}! You're next in line for ${T} on The MICA Shelf. When can I hand it to you? – ${myPlace()}`);
+    if (btn) nudge = el("div",{class:"nudge soft"},[btn]);
+  } else if (isHolder && b.status==="borrowed"){
+    const btn = waBtn(b.ownerPhone, `Message ${b.ownerName||"the owner"}`, `Hi ${b.ownerName||""}! About ${T} from The MICA Shelf: `);
+    if (btn) nudge = el("div",{class:"nudge soft"},[btn]);
+  }
+  if (nudge) body.append(nudge);
 
   if (wl.length && (isOwner || isHolder || pos>=0)){
     const q = el("ol",{class:"queue"});
@@ -658,7 +823,78 @@ function fillBook(b){
   if (!isHolder && !isOwner && pos>=0) body.append(el("p",{class:"hint",text: pos===0 ? (passOn ? "You're next. The current reader can hand it straight to you." : `You're next. ${ownerName} will lend it to you when it's back.`) : `You're #${pos+1} in line.`}));
   if (acts.children.length) body.append(acts);
 }
-function clearLoan(){ return {status:"available",borrowerId:null,borrowerName:null,borrowerBlock:null,borrowerRoom:null,requestedAt:null,borrowedAt:null,dueAt:null}; }
+function renderReviews(body, b, revs){
+  const wrap = el("div",{class:"reviews"});
+  if (state.reviewsError){
+    wrap.append(el("div",{class:"notice",text:"Reviews can't load yet. The database rules need the review section added (see the updated firestore.rules)."}));
+    body.append(wrap); return;
+  }
+  const st = ratingStats(revs);
+  wrap.append(el("div",{class:"rv-sum"}, st.count
+    ? [el("span",{class:"big",text:st.avg.toFixed(1)}), el("span",{class:"stars","aria-label":`${st.avg.toFixed(1)} out of 5`,text:starsText(st.avg)}), el("span",{class:"hint",text:`from ${st.count} rating${st.count>1?"s":""}`})]
+    : [el("span",{class:"hint",text: revs.length ? "No star ratings yet." : "No reviews yet. Be the first Mican to say what you thought."})]));
+  const mine = revs.find(r=>r.uid===state.uid);
+  if (!mine || state.reviewEditing===b.id) wrap.append(reviewForm(b, mine));
+  const list = el("div",{class:"rv-list"});
+  revs.forEach(r=>{
+    const isMe = r.uid===state.uid;
+    if (isMe && state.reviewEditing===b.id) return;
+    list.append(el("article",{class:"rv"+(isMe?" mine":"")},[
+      el("header",{},[
+        el("b",{text: isMe ? "You" : (r.name||"A Mican")}),
+        r.uid===b.ownerId ? el("span",{class:"tag",text:"Owner"}) : null,
+        r.rating ? el("span",{class:"stars","aria-label":`${r.rating} out of 5`,text:starsText(r.rating)}) : null,
+        el("time",{text:fmtDate(r.updatedAt||r.createdAt)})
+      ]),
+      r.text ? el("p",{text:r.text}) : null,
+      isMe ? el("div",{class:"rv-acts"},[
+        el("button",{class:"btn link",type:"button",text:"Edit",onclick:()=>{ state.reviewEditing=b.id; refill(b.id); }}),
+        el("button",{class:"btn link",type:"button",text:"Delete",onclick:async()=>{
+          if (!confirm("Delete your review?")) return;
+          await write(()=>state.db.doc(`books/${b.id}/reviews/${state.uid}`).delete(), "Review deleted");
+        }})
+      ]) : null
+    ]));
+  });
+  wrap.append(list);
+  body.append(wrap);
+}
+
+function reviewForm(b, mine){
+  let rating = (mine && mine.rating) || 0;
+  const pick = el("div",{class:"star-pick",role:"radiogroup","aria-label":"Your rating (optional)"});
+  const paint = () => [...pick.children].forEach((s,i)=>{ s.textContent = i<rating ? "★" : "☆"; s.setAttribute("aria-checked", String(i+1===rating)); });
+  for (let i=1;i<=5;i++) pick.append(el("button",{type:"button",role:"radio","aria-label":`${i} star${i>1?"s":""}`,
+    onclick:()=>{ rating = rating===i ? 0 : i; state.reviewEditing=b.id; paint(); }}));
+  paint();
+  const text = el("textarea",{maxlength:1500,placeholder:"What did you think? Flag spoilers before you share them."});
+  text.value = (mine && mine.text) || "";
+  text.addEventListener("input",()=>{ state.reviewEditing=b.id; });
+  const form = el("form",{class:"fields rv-form"},[
+    el("b",{text: mine ? "Edit your review" : "Read it? Leave a review"}),
+    pick, text,
+    el("div",{class:"actions"},[
+      mine ? el("button",{class:"btn",type:"button",text:"Cancel",onclick:()=>{ state.reviewEditing=null; refill(b.id); }}) : null,
+      el("button",{class:"btn hot",type:"submit",text: mine ? "Save review" : "Post review"})
+    ])
+  ]);
+  form.onsubmit = e=>{
+    e.preventDefault();
+    const t = text.value.trim();
+    if (!t && !rating){ toast("Add a star rating or a few words first."); return; }
+    needProfile(async ()=>{
+      const now = Date.now();
+      const ok = await write(()=>state.db.doc(`books/${b.id}/reviews/${state.uid}`).set({
+        bookId:b.id, uid:state.uid, name:state.profile.name, rating, text:t,
+        createdAt:(mine && mine.createdAt) || now, updatedAt:now
+      }), mine ? "Review updated" : "Review posted");
+      if (ok){ state.reviewEditing=null; openBook(b.id, "reviews"); }
+    });
+  };
+  return form;
+}
+
+function clearLoan(){ return {status:"available",borrowerId:null,borrowerName:null,borrowerBlock:null,borrowerRoom:null,borrowerPhone:null,requestedAt:null,borrowedAt:null,dueAt:null}; }
 
 function joinLine(b){
   needProfile(async ()=>{
@@ -685,7 +921,7 @@ function requestBook(b){
     const p = state.profile;
     const cur = await fresh(b).catch(()=>null);
     if (cur && cur.status!=="available"){ toast("Someone asked for it just before you. Join the line instead."); openBook(b.id); return; }
-    await write(()=>bookRef(b.id).update({status:"requested",borrowerId:state.uid,borrowerName:p.name,borrowerBlock:p.block||"",borrowerRoom:p.room||"",requestedAt:Date.now()}), "Request sent");
+    await write(()=>bookRef(b.id).update({status:"requested",borrowerId:state.uid,borrowerName:p.name,borrowerBlock:p.block||"",borrowerRoom:p.room||"",borrowerPhone:p.phone||"",requestedAt:Date.now()}), "Request sent");
     openBook(b.id);
   });
 }
@@ -697,23 +933,39 @@ function openProfile(then){
   const name = el("input",{name:"name",required:true,maxlength:60,value:p.name||"",autocomplete:"name"});
   const block = el("input",{name:"block",maxlength:40,value:p.block||"",placeholder:"e.g. Hostel B"});
   const room = el("input",{name:"room",maxlength:12,value:p.room||"",placeholder:"e.g. 214"});
+  const phone = el("input",{name:"phone",type:"tel",maxlength:16,value:p.phone||"",placeholder:"e.g. 98765 43210",autocomplete:"tel"});
   form.append(
     el("label",{},["Your name",name]),
     el("div",{class:"pair"},[el("label",{},["Hostel or block",block]), el("label",{},["Room",room])]),
-    el("span",{class:"hint",text:"Shown on books you lend and borrow, so people know where to find you."}),
+    el("label",{},["WhatsApp number (recommended)",phone]),
+    el("span",{class:"hint",text:"Your name and room show on books you lend and borrow. Your WhatsApp number is only used for the \"Message on WhatsApp\" buttons, so people can tell you about requests, but anyone signed in to the shelf could find it."}),
     el("div",{class:"actions"},[el("button",{class:"btn",type:"button",onclick:()=>$("#dlg").close(),text:"Cancel"}), el("button",{class:"btn primary",type:"submit",text:"Save details"})])
   );
   form.onsubmit = async e=>{
     e.preventDefault();
-    const data = {name:name.value.trim(), block:block.value.trim(), room:room.value.trim()};
+    const data = {name:name.value.trim(), block:block.value.trim(), room:room.value.trim(), phone:phone.value.trim()};
     if (!data.name) return;
+    if (data.phone && !waNumber(data.phone)){ toast("That number doesn't look right. Use a 10-digit mobile number."); return; }
     const ok = await write(()=>state.db.doc(`users/${state.uid}`).set(data), "Details saved");
-    if (ok){ state.profile = data; $("#dlg").close(); if (then) then(); }
+    if (ok){
+      state.profile = data;
+      // keep the owner details on every book you've listed up to date
+      state.books.filter(b=>b.ownerId===state.uid).forEach(b=>{
+        bookRef(b.id).update({ownerName:data.name, ownerBlock:data.block, ownerRoom:data.room, ownerPhone:data.phone}).catch(()=>{});
+      });
+      $("#dlg").close(); if (then) then();
+    }
   };
   body.append(el("div",{class:"dlg-head"},[el("div",{},[el("h2",{text:"Your details"}), el("p",{class:"by",text:"So borrowers and lenders know who you are and where to come."})]), closeBtn()]), form);
   state.openId = null; showDialog("profile"); setTimeout(()=>name.focus(),30);
 }
 
+function tidyGenre(v){
+  v = (v||"").trim().replace(/\s+/g," ");
+  if (!v) return "Other";
+  const match = GENRES.find(g=>g.toLowerCase()===v.toLowerCase());
+  return match || v.charAt(0).toUpperCase() + v.slice(1);
+}
 function openAdd(existing){
   if (existing instanceof Event) existing = null;
   needProfile(()=>{
@@ -723,13 +975,21 @@ function openAdd(existing){
     const title = el("input",{name:"title",required:true,maxlength:120,value:b.title||""});
     const author = el("input",{name:"author",maxlength:80,value:b.author||""});
     const genre = el("select",{name:"genre"});
-    GENRES.forEach(g=>genre.append(el("option",{value:g,text:g,selected:(b.genre||"Fiction")===g})));
+    const custom = b.genre && !GENRES.includes(b.genre);
+    const startGenre = custom ? "Other" : (b.genre||"Fiction");
+    GENRES.forEach(g=>genre.append(el("option",{value:g,text:g,selected:startGenre===g})));
+    const otherGenre = el("input",{name:"otherGenre",maxlength:40,placeholder:"e.g. Cricket, Cookbooks, Urdu poetry",value: custom ? b.genre : ""});
+    const otherWrap = el("label",{},["Type the genre",otherGenre]);
+    const syncOther = () => { otherWrap.hidden = genre.value!=="Other"; otherGenre.required = genre.value==="Other"; };
+    genre.addEventListener("change",()=>{ syncOther(); if (genre.value==="Other") otherGenre.focus(); });
+    syncOther();
     const note = el("textarea",{name:"note",maxlength:600,placeholder:"What's it about, and why should someone on campus read it?"});
     note.value = b.note||"";
     const passOn = el("input",{type:"checkbox",name:"passOn"}); passOn.checked = b.passOn !== false;
     form.append(
       el("label",{},["Title",title]),
       el("div",{class:"pair"},[el("label",{},["Author",author]), el("label",{},["Genre",genre])]),
+      otherWrap,
       el("label",{},["Why read it",note]),
       el("label",{class:"check"},[passOn, el("span",{text:"Borrowers can pass it straight to the next person in line. You'll always see who has it."})]),
       el("span",{class:"hint",text:`Borrowers will pick it up from ${where(state.profile.block,state.profile.room)}. Change that in Your details.`}),
@@ -738,8 +998,8 @@ function openAdd(existing){
     form.onsubmit = async e=>{
       e.preventDefault();
       const p = state.profile;
-      const fields = {title:title.value.trim(), author:author.value.trim(), genre:genre.value, note:note.value.trim(), passOn:passOn.checked,
-                      ownerName:p.name, ownerBlock:p.block||"", ownerRoom:p.room||""};
+      const fields = {title:title.value.trim(), author:author.value.trim(), genre: genre.value==="Other" ? tidyGenre(otherGenre.value) : genre.value, note:note.value.trim(), passOn:passOn.checked,
+                      ownerName:p.name, ownerBlock:p.block||"", ownerRoom:p.room||"", ownerPhone:p.phone||""};
       if (!fields.title) return;
       let ok;
       if (existing) ok = await write(()=>bookRef(existing.id).update(fields), "Changes saved");
