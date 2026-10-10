@@ -241,6 +241,10 @@ form.fields label.check input{width:20px;height:20px;margin-top:2px;accent-color
 .ph-btns{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
 .ph-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 .ph-input:focus-visible + label{outline:3px solid var(--accent);outline-offset:3px}
+.credit{margin:56px auto 0;max-width:520px;text-align:center;padding:18px 20px;border-top:3px dashed var(--line)}
+.credit-book{display:inline-block;font-size:1.6rem;transform:rotate(-8deg)}
+.credit p{margin:6px 0 0;font-size:.95rem;font-weight:600;color:var(--ink);line-height:1.55}
+.credit b{color:var(--accent);font-weight:800}
 </style>
 </head>
 <body>
@@ -300,6 +304,10 @@ form.fields label.check input{width:20px;height:20px;margin-top:2px;accent-color
 
   <section id="viewMine" hidden></section>
   </div>
+  <footer class="credit">
+    <span class="credit-book" aria-hidden="true">📚</span>
+    <p>Created by <b>Ishita Goel</b>, a Mican, a reader, and a poor person who can't afford to buy all the books she wants to read.</p>
+  </footer>
 </div>
 
 <dialog id="dlg"><div class="dlg" id="dlgBody"></div></dialog>
