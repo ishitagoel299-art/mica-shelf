@@ -31,7 +31,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:20px 24px;margin-bottom:26px;position:relative}
 h1{font-family:var(--display);font-weight:400;font-size:clamp(3.4rem,11vw,7.5rem);line-height:.88;margin:0;letter-spacing:.005em;text-transform:none}
 .lede{margin:14px 0 0;max-width:42ch;font-size:1.1rem;font-weight:600}
-.sticker{position:absolute;top:-6px;right:0;transform:rotate(8deg);background:var(--accent);color:#fff;font-weight:800;font-size:.95rem;line-height:1.1;text-align:center;width:104px;height:104px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:12px;border:3px solid var(--line);box-shadow:4px 4px 0 var(--shadow)}
+.sticker{position:absolute;top:-6px;right:76px;transform:rotate(8deg);background:var(--accent);color:#fff;font-weight:800;font-size:.95rem;line-height:1.1;text-align:center;width:104px;height:104px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:12px;border:3px solid var(--line);box-shadow:4px 4px 0 var(--shadow)}
 .who{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .btn{border:3px solid var(--line);background:var(--panel);border-radius:12px;padding:9px 16px;cursor:pointer;font-weight:800;font-size:.98rem;box-shadow:3px 3px 0 var(--shadow);transition:transform .1s, box-shadow .1s}
 .btn:hover{transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--shadow)}
@@ -145,8 +145,8 @@ form.fields textarea{min-height:100px;resize:vertical}
 
 @media (max-width:640px){
   .wrap{padding:20px 14px 60px}
-  .sticker{width:72px;height:72px;font-size:.72rem;top:-12px;right:-4px;padding:8px}
-  h1{padding-right:64px}
+  .sticker{display:none}
+  h1{padding-right:62px}
   .panel{padding:16px}
   .pair{grid-template-columns:1fr}
   .cv.lg{width:84px;height:122px}.cv.lg .ct{font-size:1rem}
@@ -197,15 +197,33 @@ form.fields label.check input{width:20px;height:20px;margin-top:2px;accent-color
 .nudge.soft{background:none;border:none;padding:0;align-items:flex-start}
 .nudge span{font-weight:600}
 .nudge .btn.wa{align-self:flex-start}
-.alerts{background:var(--panel);border:3px solid var(--accent);border-radius:18px;box-shadow:5px 5px 0 var(--shadow);padding:16px 18px;margin-bottom:22px}
-.alerts h2{font-family:var(--display);font-weight:400;font-size:1.6rem;margin:0 0 10px;color:var(--accent)}
-.alert-row{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;text-align:left;border:none;background:var(--chip);border-radius:12px;padding:10px 14px;margin-bottom:8px;font-weight:700;cursor:pointer;color:var(--ink)}
-.alert-row:hover{outline:3px solid var(--line)}
-.alert-row .go{white-space:nowrap;color:var(--accent);font-weight:800}
-.alert-extras{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-top:6px;font-weight:600}
+.bellwrap{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:16px;z-index:30}
+#bell{position:relative;width:54px;height:54px;border-radius:50%;border:3px solid var(--line);background:var(--panel);color:var(--ink);box-shadow:3px 3px 0 var(--shadow);display:grid;place-items:center;cursor:pointer;transition:transform .1s}
+#bell:hover{transform:rotate(-12deg)}
+#bell[aria-expanded="true"]{background:var(--line);color:#fff}
+.bubble{position:absolute;top:-7px;right:-7px;min-width:26px;height:26px;padding:0 7px;border-radius:13px;background:var(--accent);color:#fff;font-weight:800;font-size:.82rem;display:grid;place-items:center;border:3px solid var(--panel)}
+#bellPanel{position:absolute;right:0;top:66px;width:min(380px,calc(100vw - 28px));max-height:min(70vh,560px);overflow:auto;background:var(--panel);border:3px solid var(--line);border-radius:18px;box-shadow:6px 6px 0 var(--shadow);padding:16px}
+#bellPanel h2{font-family:var(--display);font-weight:400;font-size:1.6rem;margin:0 0 10px}
+.bp-empty{margin:4px 0 6px;font-weight:600;color:var(--muted)}
+.bp-row{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;border:none;background:none;border-radius:12px;padding:10px;cursor:pointer;font-weight:600;color:var(--ink)}
+.bp-row:hover{background:var(--chip)}
+.bp-row .dot{flex:none;width:10px;height:10px;border-radius:50%;margin-top:7px;background:transparent}
+.bp-row.new{background:var(--chip)}
+.bp-row.new .dot{background:var(--accent)}
+.bp-row.act .t{font-weight:800}
+.bp-foot{border-top:2px dashed var(--line);margin-top:10px;padding-top:12px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;font-weight:600}
+.bp-foot p{margin:0}
+@media (prefers-reduced-motion: reduce){#bell{transition:none}#bell:hover{transform:none}}
 </style>
 </head>
 <body>
+<div class="bellwrap">
+  <button id="bell" type="button" aria-label="Notifications" aria-haspopup="true" aria-expanded="false" hidden>
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+    <span class="bubble" id="bellCount" hidden></span>
+  </button>
+  <div id="bellPanel" role="dialog" aria-label="Notifications" hidden></div>
+</div>
 <div class="wrap">
   <header class="top">
     <div>
@@ -228,7 +246,7 @@ form.fields label.check input{width:20px;height:20px;margin-top:2px;accent-color
   </div>
   <div id="app">
   <div id="notice" class="notice" hidden></div>
-  <div id="alerts" hidden></div>
+
 
   <nav class="tabs" role="tablist">
     <button role="tab" id="tabShelf" aria-selected="true" type="button">Shelf</button>
@@ -418,7 +436,7 @@ const bookRef = id => state.db.doc("books/" + id);
 
 /* ---------- render ---------- */
 function renderAll(){
-  renderShelf(); renderMine(); renderBadge(); renderButtons(); renderAlerts();
+  renderShelf(); renderMine(); renderBadge(); renderButtons(); renderBell();
   if (state.openId && $("#dlg").open && $("#dlg").dataset.kind==="book" && state.reviewEditing!==state.openId){
     const b = state.books.find(x=>x.id===state.openId);
     if (b) fillBook(b); else $("#dlg").close();
@@ -536,53 +554,95 @@ function alertText(b){
   if (b.status==="available" && wl.length) return `${wl[0].name} is waiting for "${b.title}". Lend it to them when you can.`;
   return "";
 }
-const alertKey = b => [b.id,b.status,b.borrowerId||"",b.ownerAlert||"",((b.waitlist||[])[0]||{}).id||""].join("|");
-const seenAlerts = new Set(); let alertsSeeded = false;
+const alertKey = b => ["own",b.id,b.status,b.borrowerId||"",b.ownerAlert||"",((b.waitlist||[])[0]||{}).id||""].join("|");
 
-function renderAlerts(){
-  const box = $("#alerts"); box.replaceChildren();
-  if (!state.uid || !state.loaded){ box.hidden = true; document.title = "The MICA Shelf"; return; }
-  const items = state.books.filter(needsOwner);
-  document.title = items.length ? `(${items.length}) The MICA Shelf` : "The MICA Shelf";
+/* Everything that should show up under the bell, for this person. */
+function notifications(){
+  if (!state.uid) return [];
+  const out = [], now = Date.now(), DAY = 864e5;
+  for (const b of state.books){
+    if (needsOwner(b)) out.push({key:alertKey(b), id:b.id, text:alertText(b), act:true, at:b.requestedAt||b.borrowedAt||b.createdAt||0});
+    if (b.borrowerId===state.uid && b.status==="borrowed"){
+      if (b.borrowedAt && now - b.borrowedAt < 3*DAY)
+        out.push({key:`got|${b.id}|${b.borrowedAt}`, id:b.id, text:`You've got "${b.title}" from ${b.ownerName||"its owner"}. Return by ${fmtDate(b.dueAt)}.`, at:b.borrowedAt});
+      if (b.dueAt && b.dueAt - now < 2*DAY){
+        const late = b.dueAt < now;
+        out.push({key:`due|${b.id}|${b.borrowedAt}|${late?"late":"soon"}`, id:b.id, act:true, at:b.dueAt,
+          text: late ? `"${b.title}" was due ${fmtDate(b.dueAt)}. Please return it or pass it on.` : `"${b.title}" is due ${fmtDate(b.dueAt)}.`});
+      }
+    }
+    const wl = b.waitlist||[];
+    if (wl[0] && wl[0].id===state.uid && b.status!=="available")
+      out.push({key:`next|${b.id}|${b.borrowerId||""}`, id:b.id, at:wl[0].at||0,
+        text:`You're next for "${b.title}". ${b.borrowerName||"The current reader"} has it now.`});
+  }
+  return out.sort((x,y)=>(y.act?1:0)-(x.act?1:0) || (y.at||0)-(x.at||0));
+}
 
-  // pop a device notification for anything new since the page loaded
-  const keys = items.map(alertKey);
-  if (alertsSeeded && "Notification" in window && Notification.permission==="granted"){
-    items.forEach((b,i)=>{ if (!seenAlerts.has(keys[i])){
-      try{ const n = new Notification("The MICA Shelf", {body: alertText(b), tag: b.id}); n.onclick = ()=>{ window.focus(); openBook(b.id); n.close(); }; }catch(e){}
+const seenKey = () => `shelf-seen-${state.uid}`;
+function loadSeen(){ try{ return new Set(JSON.parse(localStorage.getItem(seenKey())||"[]")); }catch(e){ return new Set(); } }
+function saveSeen(set){ try{ localStorage.setItem(seenKey(), JSON.stringify([...set].slice(-300))); }catch(e){} }
+const poppedThisVisit = new Set(); let popSeeded = false;
+
+function renderBell(){
+  const bell = $("#bell"), count = $("#bellCount");
+  if (!state.uid || !state.loaded){ bell.hidden = true; $("#bellPanel").hidden = true; document.title = "The MICA Shelf"; return; }
+  bell.hidden = false;
+  const items = notifications(), seen = loadSeen();
+  const unseen = items.filter(n=>!seen.has(n.key)).length;
+  count.hidden = !unseen; count.textContent = unseen > 9 ? "9+" : unseen;
+  bell.setAttribute("aria-label", unseen ? `Notifications, ${unseen} new` : "Notifications");
+  document.title = unseen ? `(${unseen}) The MICA Shelf` : "The MICA Shelf";
+
+  // device pop-ups for anything new since this visit started
+  if (popSeeded && "Notification" in window && Notification.permission==="granted"){
+    items.forEach(n=>{ if (!poppedThisVisit.has(n.key) && !seen.has(n.key)){
+      try{ const p = new Notification("The MICA Shelf", {body:n.text, tag:n.key}); p.onclick = ()=>{ window.focus(); openBook(n.id); p.close(); }; }catch(e){}
     }});
   }
-  keys.forEach(k=>seenAlerts.add(k)); alertsSeeded = true;
+  items.forEach(n=>poppedThisVisit.add(n.key)); popSeeded = true;
 
-  const ownsBooks = state.books.some(b=>b.ownerId===state.uid);
-  const noPhone = ownsBooks && !(state.profile && state.profile.phone);
-  const canAsk = "Notification" in window && Notification.permission==="default";
-  if (!items.length && !noPhone) { box.hidden = true; return; }
-
-  const panel = el("div",{class:"alerts"});
-  if (items.length){
-    panel.append(el("h2",{text: items.length===1 ? "1 thing needs you" : `${items.length} things need you`}));
-    items.forEach(b=>panel.append(el("button",{class:"alert-row",type:"button",onclick:()=>openBook(b.id)},[
-      el("span",{text:alertText(b)}), el("span",{class:"go",text:"Open →"})
-    ])));
-  }
-  const extras = el("div",{class:"alert-extras"});
-  if (noPhone) extras.append(el("span",{},["Add your WhatsApp number so borrowers can message you. ",
-    el("button",{class:"btn link",type:"button",text:"Add it in Your details",onclick:()=>openProfile()})]));
-  if (canAsk && items.length) extras.append(el("button",{class:"btn",type:"button",text:"Alert me on this device",onclick:async()=>{
-    try{ const r = await Notification.requestPermission(); toast(r==="granted" ? "You'll get alerts while the shelf is open in a tab" : "Alerts are off for this browser"); }catch(e){}
-    renderAlerts();
-  }}));
-  if (extras.children.length) panel.append(extras);
-  box.append(panel); box.hidden = false;
+  if (!$("#bellPanel").hidden) fillBellPanel(items, seen);
 }
+
+function fillBellPanel(items, seen){
+  const panel = $("#bellPanel"); panel.replaceChildren();
+  panel.append(el("h2",{text:"Notifications"}));
+  if (!items.length) panel.append(el("p",{class:"bp-empty",text:"You're all caught up."}));
+  items.forEach(n=>panel.append(el("button",{class:"bp-row"+(seen.has(n.key)?"":" new")+(n.act?" act":""),type:"button",
+    onclick:()=>{ closeBell(); openBook(n.id); }},[
+    el("span",{class:"dot","aria-hidden":"true"}), el("span",{class:"t",text:n.text})
+  ])));
+  const foot = el("div",{class:"bp-foot"});
+  const ownsBooks = state.books.some(b=>b.ownerId===state.uid);
+  if (ownsBooks && !(state.profile && state.profile.phone))
+    foot.append(el("p",{},["Add your WhatsApp number so borrowers can message you. ",
+      el("button",{class:"btn link",type:"button",text:"Add it",onclick:()=>{ closeBell(); openProfile(); }})]));
+  if ("Notification" in window && Notification.permission==="default")
+    foot.append(el("button",{class:"btn",type:"button",text:"Pop up alerts on this device",onclick:async()=>{
+      try{ const r = await Notification.requestPermission(); toast(r==="granted" ? "You'll get pop-ups while the shelf is open in a tab" : "Pop-ups are off for this browser"); }catch(e){}
+      fillBellPanel(notifications(), loadSeen());
+    }}));
+  if (foot.children.length) panel.append(foot);
+}
+function openBell(){
+  const items = notifications(), seenBefore = loadSeen();
+  $("#bellPanel").hidden = false; $("#bell").setAttribute("aria-expanded","true");
+  fillBellPanel(items, seenBefore);            // new ones stay highlighted while the panel is open
+  items.forEach(n=>seenBefore.add(n.key)); saveSeen(seenBefore);
+  const count = $("#bellCount"); count.hidden = true; document.title = "The MICA Shelf";
+}
+function closeBell(){ $("#bellPanel").hidden = true; $("#bell").setAttribute("aria-expanded","false"); renderBell(); }
+$("#bell").onclick = e => { e.stopPropagation(); $("#bellPanel").hidden ? openBell() : closeBell(); };
+document.addEventListener("click", e => { if (!$("#bellPanel").hidden && !e.target.closest(".bellwrap")) closeBell(); });
+document.addEventListener("keydown", e => { if (e.key==="Escape" && !$("#bellPanel").hidden) closeBell(); });
 
 function needsOwner(b){
   return b.ownerId===state.uid && state.uid && (b.status==="requested"||b.status==="returning"||!!b.ownerAlert||(b.status==="available"&&(b.waitlist||[]).length));
 }
 function renderBadge(){
   const n = state.books.filter(needsOwner).length;
-  const bd = $("#mineBadge"); bd.hidden = !n; bd.textContent = n;
+  $("#mineBadge").hidden = true;
 }
 
 function rowFor(b, stateText, tone, sub){
