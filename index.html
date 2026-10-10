@@ -224,6 +224,18 @@ form.fields label.check input{width:20px;height:20px;margin-top:2px;accent-color
 .reply-form{display:flex;flex-direction:column;gap:8px}
 .reply-form textarea{padding:10px 12px;border:3px solid var(--line);border-radius:12px;background:var(--panel);min-height:70px;resize:vertical;font-size:1rem}
 .rv-acts{flex-wrap:wrap}
+.cv.photo{padding:0;background:#fff !important}
+.cv.photo::before{display:none}
+.cv.photo img{width:100%;height:100%;object-fit:cover;display:block}
+.ph-field{display:flex;flex-direction:column;gap:6px}
+.ph-label{font-size:.92rem;font-weight:800}
+.ph-row{display:flex;gap:14px;align-items:flex-start}
+.ph-preview{flex:none;width:84px;height:120px;border:3px dashed var(--line);border-radius:6px 10px 10px 6px;display:grid;place-items:center;overflow:hidden;background:var(--chip);text-align:center}
+.ph-preview span{font-size:.7rem;font-weight:600;color:var(--muted);padding:6px}
+.ph-preview img{width:100%;height:100%;object-fit:cover}
+.ph-btns{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.ph-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.ph-input:focus-visible + label{outline:3px solid var(--accent);outline-offset:3px}
 </style>
 </head>
 <body>
@@ -346,12 +358,46 @@ const PATTERNS = [
   acc=>`linear-gradient(to bottom, transparent 0 18%, ${acc} 18% 28%, transparent 28% 34%, ${acc} 34% 38%, transparent 38%)`,
   acc=>`conic-gradient(from 45deg at 70% 30%, ${acc} 0 25%, transparent 25% 100%)`
 ];
+const coverCache = new Map(), coverWaiting = new Map();
+function loadCover(b){
+  const key = b.id + ":" + (b.photoV||0);
+  if (coverCache.has(key)) return Promise.resolve(coverCache.get(key));
+  if (!coverWaiting.has(key)) coverWaiting.set(key, state.db.doc("covers/" + b.id).get()
+    .then(s=>{ const d = s.exists ? s.data().data : null; coverCache.set(key, d); return d; })
+    .catch(()=>null));
+  return coverWaiting.get(key);
+}
 function coverEl(b, size){
   const [bg,fg,acc] = pal(b);
   const pat = PATTERNS[hash((b.author||"")+(b.title||""))%PATTERNS.length](acc);
-  return el("div",{class:"cv "+size,"aria-hidden":"true",style:`background:${pat}, ${bg};color:${fg}`},[
+  const node = el("div",{class:"cv "+size,"aria-hidden":"true",style:`background:${pat}, ${bg};color:${fg}`},[
     el("span",{class:"ct",text:b.title}), el("span",{class:"ca",text:b.author||""})
   ]);
+  if (b.hasPhoto && state.db){
+    const show = d => { if (d){ node.classList.add("photo"); node.replaceChildren(el("img",{src:d,alt:""})); } };
+    const key = b.id + ":" + (b.photoV||0);
+    if (coverCache.has(key)) show(coverCache.get(key)); else loadCover(b).then(show);
+  }
+  return node;
+}
+
+/* Shrink a photo in the browser so it stays small enough to store in the database. */
+function shrinkPhoto(file){
+  return new Promise((resolve, reject)=>{
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = ()=>{
+      const MAX = 520, scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.naturalWidth*scale); c.height = Math.round(img.naturalHeight*scale);
+      const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0,0,c.width,c.height); g.drawImage(img,0,0,c.width,c.height);
+      URL.revokeObjectURL(url);
+      let q = 0.78, out = c.toDataURL("image/jpeg", q);
+      while (out.length > 180000 && q > 0.4){ q -= 0.1; out = c.toDataURL("image/jpeg", q); }
+      resolve(out);
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error("unreadable")); };
+    img.src = url;
+  });
 }
 const LOAN_DAYS = 14;
 
@@ -1076,6 +1122,7 @@ function joinLine(b){
 async function removeBook(b){
   if (!confirm(`Take "${b.title}" off the shelf?`)) return;
   const ok = await write(()=>bookRef(b.id).delete(), "Removed");
+  if (ok && b.hasPhoto) state.db.doc("covers/" + b.id).delete().catch(()=>{});
   if (ok) $("#dlg").close();
 }
 
@@ -1154,10 +1201,38 @@ function openAdd(existing){
     const note = el("textarea",{name:"note",maxlength:600,placeholder:"What's it about, and why should someone on campus read it?"});
     note.value = b.note||"";
     const passOn = el("input",{type:"checkbox",name:"passOn"}); passOn.checked = b.passOn !== false;
+
+    // photo: undefined = unchanged, null = remove, string = new photo
+    let photo;
+    const preview = el("div",{class:"ph-preview"});
+    const fileIn = el("input",{type:"file",accept:"image/*",class:"ph-input",id:"phIn"});
+    const pickLbl = el("label",{class:"btn",for:"phIn"});
+    const removeBtn = el("button",{class:"btn link",type:"button",text:"Remove photo"});
+    const paintPhoto = d => {
+      preview.replaceChildren(d ? el("img",{src:d,alt:"Photo of the book"}) : el("span",{text:"No photo yet. We'll make a cover from the title."}));
+      pickLbl.textContent = d ? "Change photo" : "Add a photo";
+      removeBtn.hidden = !d;
+    };
+    paintPhoto(null);
+    if (b.hasPhoto) loadCover(b).then(d=>{ if (photo===undefined) paintPhoto(d); });
+    fileIn.addEventListener("change", async ()=>{
+      const f = fileIn.files && fileIn.files[0]; if (!f) return;
+      pickLbl.textContent = "Loading…";
+      try{ photo = await shrinkPhoto(f); paintPhoto(photo); }
+      catch(e){ toast("Couldn't read that photo. Try a JPG or PNG."); paintPhoto(b.hasPhoto ? coverCache.get(b.id+":"+(b.photoV||0)) : null); }
+      fileIn.value = "";
+    });
+    removeBtn.onclick = ()=>{ photo = null; paintPhoto(null); };
+    const photoField = el("div",{class:"ph-field"},[
+      el("span",{class:"ph-label",text:"Photo of the book (optional)"}),
+      el("div",{class:"ph-row"},[preview, el("div",{class:"ph-btns"},[fileIn, pickLbl, removeBtn,
+        el("span",{class:"hint",text:"Snap the cover, or the book on your shelf."})])])
+    ]);
     form.append(
       el("label",{},["Title",title]),
       el("div",{class:"pair"},[el("label",{},["Author",author]), el("label",{},["Genre",genre])]),
       otherWrap,
+      photoField,
       el("label",{},["Why read it",note]),
       el("label",{class:"check"},[passOn, el("span",{text:"Borrowers can pass it straight to the next person in line. You'll always see who has it."})]),
       el("span",{class:"hint",text:`Borrowers will pick it up from ${where(state.profile.block,state.profile.room)}. Change that in Your details.`}),
@@ -1169,10 +1244,23 @@ function openAdd(existing){
       const fields = {title:title.value.trim(), author:author.value.trim(), genre: genre.value==="Other" ? tidyGenre(otherGenre.value) : genre.value, note:note.value.trim(), passOn:passOn.checked,
                       ownerName:p.name, ownerBlock:p.block||"", ownerRoom:p.room||"", ownerPhone:p.phone||""};
       if (!fields.title) return;
-      let ok;
+      const v = Date.now();
+      if (typeof photo === "string"){ fields.hasPhoto = true; fields.photoV = v; }
+      if (photo === null){ fields.hasPhoto = false; }
+      const saveBtn = form.querySelector('button[type="submit"]'); saveBtn.disabled = true;
+      let ok, id = existing && existing.id;
       if (existing) ok = await write(()=>bookRef(existing.id).update(fields), "Changes saved");
-      else ok = await write(()=>state.db.collection("books").add({...fields, ownerId:state.uid, color:Math.floor(Math.random()*SPINES.length),
-                 ...clearLoan(), waitlist:[], journey:[], ownerAlert:null, timesBorrowed:0, createdAt:Date.now()}), "On the shelf");
+      else ok = await write(async ()=>{ const ref = await state.db.collection("books").add({...fields, ownerId:state.uid, color:Math.floor(Math.random()*SPINES.length),
+                 ...clearLoan(), waitlist:[], journey:[], ownerAlert:null, timesBorrowed:0, createdAt:Date.now()}); id = ref.id; }, "On the shelf");
+      if (ok && id){
+        if (typeof photo === "string"){
+          coverCache.set(id+":"+v, photo);
+          const saved = await write(()=>state.db.doc("covers/"+id).set({ownerId:state.uid, data:photo, updatedAt:v}));
+          if (!saved){ bookRef(id).update({hasPhoto:false}).catch(()=>{}); toast("The book saved, but the photo didn't. Check the database rules."); }
+        }
+        if (photo === null && existing && existing.hasPhoto) state.db.doc("covers/"+id).delete().catch(()=>{});
+      }
+      saveBtn.disabled = false;
       if (ok) $("#dlg").close();
     };
     body.append(el("div",{class:"dlg-head"},[el("div",{},[el("h2",{text: existing?"Edit book":"Lend a book"})]), closeBtn()]), form);
