@@ -214,6 +214,16 @@ form.fields label.check input{width:20px;height:20px;margin-top:2px;accent-color
 .bp-foot{border-top:2px dashed var(--line);margin-top:10px;padding-top:12px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;font-weight:600}
 .bp-foot p{margin:0}
 @media (prefers-reduced-motion: reduce){#bell{transition:none}#bell:hover{transform:none}}
+.row-btns{display:flex;flex-wrap:wrap;gap:10px}
+.replies{margin:10px 0 0 6px;padding-left:14px;border-left:3px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.reply{background:var(--panel);border-radius:12px;padding:8px 12px}
+.reply header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.92rem}
+.reply header time{margin-left:auto;color:var(--muted);font-size:.8rem;font-weight:600}
+.reply p{margin:4px 0 0;white-space:pre-wrap;font-size:.95rem}
+.rv .tag.soft{background:var(--chip);color:var(--ink);border:2px solid var(--line)}
+.reply-form{display:flex;flex-direction:column;gap:8px}
+.reply-form textarea{padding:10px 12px;border:3px solid var(--line);border-radius:12px;background:var(--panel);min-height:70px;resize:vertical;font-size:1rem}
+.rv-acts{flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -346,7 +356,7 @@ function coverEl(b, size){
 const LOAN_DAYS = 14;
 
 const state = {
-  reviews:{}, reviewsError:false, bookTab:"about", reviewEditing:null,
+  reviews:{}, replies:{}, replyOpen:null, typingIn:null, reviewsError:false, bookTab:"about", reviewEditing:null,
   db:null, user:null, uid:null, canWrite:true, readOnly:false,
   books:[], profile:null, openId:null, tab:"shelf", loaded:false
 };
@@ -375,13 +385,14 @@ function toast(msg){
 function notice(msg){ const n=$("#notice"); if(!msg){n.hidden=true;return;} n.textContent=msg; n.hidden=false; }
 
 /* ---------- data ---------- */
-let unsubBooks = null, unsubReviews = null;
+let unsubBooks = null, unsubReviews = null, unsubReplies = null;
 async function boot(){
   renderShelf();
   state.db = firestoreDb;
   onAuthStateChanged(auth, async u => {
     if (unsubBooks){ unsubBooks(); unsubBooks = null; }
     if (unsubReviews){ unsubReviews(); unsubReviews = null; }
+    if (unsubReplies){ unsubReplies(); unsubReplies = null; }
     if (!u){
       state.uid = null; state.profile = null; state.books = []; state.loaded = false;
       $("#gate").hidden = false; $("#app").hidden = true; $("#signOut").hidden = true; return;
@@ -400,6 +411,11 @@ async function boot(){
     unsubBooks = state.db.collection("books").limit(1000).onSnapshot(snap=>{
       state.books = snap.docs.map(d=>({id:d.id, ...d.data()}));
       state.loaded = true; notice(""); renderAll();
+      const want = new URLSearchParams(location.search).get("book");
+      if (want){
+        history.replaceState(null, "", location.pathname);
+        if (state.books.some(x=>x.id===want)) openBook(want); else toast("That book isn't on the shelf any more.");
+      }
     }, err=>{
       notice(err && err.code==="permission-denied"
         ? "Your account can't read the shelf. Check the Firestore rules (README step 3)."
@@ -410,6 +426,12 @@ async function boot(){
       snap.docs.forEach(d=>{ const r = d.data(); if (r && r.bookId) (m[r.bookId] = m[r.bookId] || []).push(r); });
       state.reviews = m; state.reviewsError = false; renderAll();
     }, err=>{ state.reviewsError = true; renderAll(); });
+    unsubReplies = state.db.group("replies").onSnapshot(snap=>{
+      const m = {};
+      snap.docs.forEach(d=>{ const r = d.data(); if (r && r.bookId && r.reviewUid){ const k = r.bookId+"/"+r.reviewUid; (m[k] = m[k] || []).push({id:d.id, ...r}); } });
+      Object.values(m).forEach(a=>a.sort((x,y)=>(x.createdAt||0)-(y.createdAt||0)));
+      state.replies = m; renderAll();
+    }, err=>{ state.repliesError = true; });
     renderAll();
   });
 }
@@ -437,7 +459,7 @@ const bookRef = id => state.db.doc("books/" + id);
 /* ---------- render ---------- */
 function renderAll(){
   renderShelf(); renderMine(); renderBadge(); renderButtons(); renderBell();
-  if (state.openId && $("#dlg").open && $("#dlg").dataset.kind==="book" && state.reviewEditing!==state.openId){
+  if (state.openId && $("#dlg").open && $("#dlg").dataset.kind==="book" && state.reviewEditing!==state.openId && state.typingIn!==state.openId){
     const b = state.books.find(x=>x.id===state.openId);
     if (b) fillBook(b); else $("#dlg").close();
   }
@@ -565,6 +587,10 @@ function notifications(){
     if (b.borrowerId===state.uid && b.status==="borrowed"){
       if (b.borrowedAt && now - b.borrowedAt < 3*DAY)
         out.push({key:`got|${b.id}|${b.borrowedAt}`, id:b.id, text:`You've got "${b.title}" from ${b.ownerName||"its owner"}. Return by ${fmtDate(b.dueAt)}.`, at:b.borrowedAt});
+      const w0 = (b.waitlist||[])[0];
+      if (w0 && b.passOn !== false)
+        out.push({key:`wantnext|${b.id}|${w0.id}`, id:b.id, act:true, at:w0.at||0,
+          text:`${w0.name} wants "${b.title}" next. Pass it to them when you're done.`});
       if (b.dueAt && b.dueAt - now < 2*DAY){
         const late = b.dueAt < now;
         out.push({key:`due|${b.id}|${b.borrowedAt}|${late?"late":"soon"}`, id:b.id, act:true, at:b.dueAt,
@@ -575,6 +601,18 @@ function notifications(){
     if (wl[0] && wl[0].id===state.uid && b.status!=="available")
       out.push({key:`next|${b.id}|${b.borrowerId||""}`, id:b.id, at:wl[0].at||0,
         text:`You're next for "${b.title}". ${b.borrowerName||"The current reader"} has it now.`});
+  }
+  for (const [k, reps] of Object.entries(state.replies||{})){
+    const [bookId, reviewUid] = k.split("/");
+    const book = state.books.find(x=>x.id===bookId); if (!book) continue;
+    reps.forEach((x,i)=>{
+      if (x.uid===state.uid || now - (x.createdAt||0) > 14*DAY) return;
+      const mineReview = reviewUid===state.uid;
+      const inThread = reps.slice(0,i).some(y=>y.uid===state.uid);
+      if (!mineReview && !inThread) return;
+      out.push({key:`reply|${bookId}|${x.id}`, id:bookId, tab:"reviews", at:x.createdAt,
+        text: mineReview ? `${x.name||"Someone"} replied to your review of "${book.title}"` : `${x.name||"Someone"} also replied on "${book.title}"`});
+    });
   }
   return out.sort((x,y)=>(y.act?1:0)-(x.act?1:0) || (y.at||0)-(x.at||0));
 }
@@ -597,7 +635,7 @@ function renderBell(){
   // device pop-ups for anything new since this visit started
   if (popSeeded && "Notification" in window && Notification.permission==="granted"){
     items.forEach(n=>{ if (!poppedThisVisit.has(n.key) && !seen.has(n.key)){
-      try{ const p = new Notification("The MICA Shelf", {body:n.text, tag:n.key}); p.onclick = ()=>{ window.focus(); openBook(n.id); p.close(); }; }catch(e){}
+      try{ const p = new Notification("The MICA Shelf", {body:n.text, tag:n.key}); p.onclick = ()=>{ window.focus(); openBook(n.id, n.tab); p.close(); }; }catch(e){}
     }});
   }
   items.forEach(n=>poppedThisVisit.add(n.key)); popSeeded = true;
@@ -610,7 +648,7 @@ function fillBellPanel(items, seen){
   panel.append(el("h2",{text:"Notifications"}));
   if (!items.length) panel.append(el("p",{class:"bp-empty",text:"You're all caught up."}));
   items.forEach(n=>panel.append(el("button",{class:"bp-row"+(seen.has(n.key)?"":" new")+(n.act?" act":""),type:"button",
-    onclick:()=>{ closeBell(); openBook(n.id); }},[
+    onclick:()=>{ closeBell(); openBook(n.id, n.tab); }},[
     el("span",{class:"dot","aria-hidden":"true"}), el("span",{class:"t",text:n.text})
   ])));
   const foot = el("div",{class:"bp-foot"});
@@ -713,7 +751,7 @@ $("#tabMine").onclick=()=>setTab("mine");
 
 /* ---------- dialogs ---------- */
 function showDialog(kind){ const d=$("#dlg"); d.dataset.kind=kind; if(!d.open) d.showModal(); }
-$("#dlg").addEventListener("close",()=>{ state.openId=null; state.reviewEditing=null; });
+$("#dlg").addEventListener("close",()=>{ state.openId=null; state.reviewEditing=null; state.passHelp=null; state.replyOpen=null; state.typingIn=null; });
 $("#dlg").addEventListener("click",e=>{ if(e.target.id==="dlg") $("#dlg").close(); });
 const closeBtn = () => el("button",{class:"close",type:"button","aria-label":"Close",onclick:()=>$("#dlg").close(),text:"×"});
 
@@ -837,6 +875,28 @@ function fillBook(b){
 
   const j = journeyEl(b, isOwner); if (j) body.append(j);
 
+  if (isHolder && b.status==="borrowed"){
+    const link = `${location.origin}${location.pathname}?book=${encodeURIComponent(b.id)}`;
+    if (!passOn){
+      body.append(el("p",{class:"hint",text:`${b.ownerName||"The owner"} wants this back before anyone else reads it, so return it to them when you're done.`}));
+    } else if (state.passHelp===b.id){
+      const msg = `Want to read "${b.title}" after me? Open this on The MICA Shelf and tap "Ask to read it next": ${link}`;
+      body.append(el("div",{class:"nudge"},[
+        el("b",{text:"Pass it to a friend"}),
+        el("span",{text:"Send them this book's link. Once they tap \"Ask to read it next\", a \"Passed to\" button with their name appears here, and the owner sees the hand-off."}),
+        el("div",{class:"row-btns"},[
+          el("a",{class:"btn wa",href:`https://wa.me/?text=${encodeURIComponent(msg)}`,target:"_blank",rel:"noopener",text:"Send link on WhatsApp"}),
+          el("button",{class:"btn",type:"button",text:"Copy link",onclick:async()=>{
+            try{ await navigator.clipboard.writeText(link); toast("Link copied"); }catch(e){ prompt("Copy this link:", link); }
+          }})
+        ])
+      ]));
+    } else if (next){
+      body.append(el("p",{class:"hint"},["Want to give it to someone who isn't in line? ",
+        el("button",{class:"btn link",type:"button",text:"Send them the link",onclick:()=>{ state.passHelp=b.id; refill(b.id); }})]));
+    }
+  }
+
   const acts = el("div",{class:"actions"});
   const can = state.db && state.canWrite && !state.readOnly && me;
   const A = (text, fn, cls="btn") => el("button",{class:cls,type:"button",disabled:!can,onclick:fn,text});
@@ -871,6 +931,7 @@ function fillBook(b){
       if (passOn && next) acts.append(A(`Passed to ${next.name}`, ()=>{
         if (confirm(`Hand "${b.title}" to ${next.name}? ${ownerName} will see that it's with them now.`)) lendTo(b, next, "passed", state.profile?.name || b.borrowerName || "Borrower");
       }, "btn hot"));
+      if (passOn && !next) acts.append(A("Pass it on", ()=>{ state.passHelp = b.id; refill(b.id); }, "btn hot"));
     }
   } else {
     if (b.status==="available" && !wl.length) acts.append(A("Ask to borrow", ()=>requestBook(b), "btn hot"));
@@ -907,17 +968,64 @@ function renderReviews(body, b, revs){
         el("time",{text:fmtDate(r.updatedAt||r.createdAt)})
       ]),
       r.text ? el("p",{text:r.text}) : null,
-      isMe ? el("div",{class:"rv-acts"},[
+      el("div",{class:"rv-acts"},[
+        el("button",{class:"btn link",type:"button",text:"Reply",onclick:()=>{ state.replyOpen = r.uid; refill(b.id); }}),
+        ...(isMe ? [
         el("button",{class:"btn link",type:"button",text:"Edit",onclick:()=>{ state.reviewEditing=b.id; refill(b.id); }}),
         el("button",{class:"btn link",type:"button",text:"Delete",onclick:async()=>{
           if (!confirm("Delete your review?")) return;
           await write(()=>state.db.doc(`books/${b.id}/reviews/${state.uid}`).delete(), "Review deleted");
-        }})
-      ]) : null
+        }})] : [])
+      ]),
+      repliesEl(b, r)
     ]));
   });
   wrap.append(list);
   body.append(wrap);
+}
+
+function repliesEl(b, r){
+  const reps = state.replies[b.id+"/"+r.uid] || [];
+  const open = state.replyOpen === r.uid;
+  if (!reps.length && !open) return null;
+  const box = el("div",{class:"replies"});
+  reps.forEach(x=>{
+    const isMe = x.uid===state.uid;
+    box.append(el("div",{class:"reply"},[
+      el("header",{},[
+        el("b",{text: isMe ? "You" : (x.name||"A Mican")}),
+        x.uid===b.ownerId ? el("span",{class:"tag",text:"Owner"}) : null,
+        x.uid===r.uid ? el("span",{class:"tag soft",text:"Reviewer"}) : null,
+        el("time",{text:fmtDate(x.createdAt)})
+      ]),
+      el("p",{text:x.text}),
+      isMe ? el("div",{class:"rv-acts"},[el("button",{class:"btn link",type:"button",text:"Delete",onclick:async()=>{
+        if (!confirm("Delete your reply?")) return;
+        await write(()=>state.db.doc(`books/${b.id}/reviews/${r.uid}/replies/${x.id}`).delete(), "Reply deleted");
+      }})]) : null
+    ]));
+  });
+  if (open){
+    const text = el("textarea",{maxlength:800,placeholder:`Reply to ${r.uid===state.uid ? "this thread" : (r.name||"them")}…`});
+    text.addEventListener("input",()=>{ state.typingIn = b.id; });
+    const form = el("form",{class:"reply-form"},[text, el("div",{class:"actions"},[
+      el("button",{class:"btn",type:"button",text:"Cancel",onclick:()=>{ state.replyOpen=null; state.typingIn=null; refill(b.id); }}),
+      el("button",{class:"btn hot",type:"submit",text:"Post reply"})
+    ])]);
+    form.onsubmit = e=>{
+      e.preventDefault();
+      const t = text.value.trim(); if (!t){ toast("Write something first."); return; }
+      needProfile(async ()=>{
+        const ok = await write(()=>state.db.collection(`books/${b.id}/reviews/${r.uid}/replies`).add({
+          bookId:b.id, reviewUid:r.uid, uid:state.uid, name:state.profile.name, text:t, createdAt:Date.now()
+        }), "Reply posted");
+        if (ok){ state.replyOpen=null; state.typingIn=null; openBook(b.id, "reviews"); }
+      });
+    };
+    box.append(form);
+    setTimeout(()=>text.focus(),30);
+  }
+  return box;
 }
 
 function reviewForm(b, mine){
