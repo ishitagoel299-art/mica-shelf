@@ -370,6 +370,9 @@ const firebaseConfig = {
       Leave "" while testing with friends' personal Gmail accounts. */
 const ALLOWED_DOMAIN = "";
 
+/* EmailJS: sends the alert emails (free plan: 200 a month) */
+const EMAILJS = { service: "service_gdrbgug", template: "template_8jec0om", key: "KsxwtxZSYDYnOv8oR" };
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, collection, collectionGroup, getDoc, updateDoc, setDoc, deleteDoc, addDoc, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -502,7 +505,7 @@ async function boot(){
       return;
     }
     $("#gate").hidden = true; $("#app").hidden = false; $("#signOut").hidden = false;
-    state.uid = u.uid; state.canWrite = true; state.readOnly = false;
+    state.uid = u.uid; state.email = (u.email||"").toLowerCase(); state.canWrite = true; state.readOnly = false;
     try{
       const snap = await state.db.doc(`users/${u.uid}`).get();
       state.profile = snap.exists ? snap.data() : (u.displayName ? {name:u.displayName, block:"", room:"", _guess:true} : null);
@@ -510,6 +513,12 @@ async function boot(){
     unsubBooks = state.db.collection("books").limit(1000).onSnapshot(snap=>{
       state.books = snap.docs.map(d=>({id:d.id, ...d.data()}));
       state.loaded = true; notice(""); renderAll();
+      if (!state.emailSynced && state.profile && !state.profile._guess){
+        state.emailSynced = true;
+        const want = myEmail();
+        state.books.filter(x=>x.ownerId===state.uid && (x.ownerEmail||"")!==want)
+          .forEach(x=>bookRef(x.id).update({ownerEmail:want}).catch(()=>{}));
+      }
       const want = new URLSearchParams(location.search).get("book");
       if (want){
         history.replaceState(null, "", location.pathname);
@@ -774,6 +783,18 @@ $("#bell").onclick = e => { e.stopPropagation(); $("#bellPanel").hidden ? openBe
 document.addEventListener("click", e => { if (!$("#bellPanel").hidden && !e.target.closest(".bellwrap")) closeBell(); });
 document.addEventListener("keydown", e => { if (e.key==="Escape" && !$("#bellPanel").hidden) closeBell(); });
 
+/* ---------- email alerts ---------- */
+function myEmail(){ return (state.profile && state.profile.emailAlerts === false) ? "" : (state.email || ""); }
+function sendEmail(to, toName, subject, message, bookId){
+  if (!to || to === state.email) return;
+  const link = `${location.origin}${location.pathname}?book=${encodeURIComponent(bookId)}`;
+  fetch("https://api.emailjs.com/api/v1.0/email/send", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ service_id: EMAILJS.service, template_id: EMAILJS.template, user_id: EMAILJS.key,
+      template_params: { to_email: to, to_name: toName || "there", subject, message, link, reply_to: state.email || "" } })
+  }).catch(()=>{});
+}
+
 function needsOwner(b){
   return b.ownerId===state.uid && state.uid && (b.status==="requested"||b.status==="returning"||!!b.ownerAlert||(b.status==="available"&&(b.waitlist||[]).length));
 }
@@ -865,7 +886,7 @@ function openBook(id, tab){
   }
 }
 
-const me_ = () => ({id:state.uid, name:state.profile.name, block:state.profile.block||"", room:state.profile.room||"", phone:state.profile.phone||"", at:Date.now()});
+const me_ = () => ({id:state.uid, name:state.profile.name, block:state.profile.block||"", room:state.profile.room||"", phone:state.profile.phone||"", email:myEmail(), at:Date.now()});
 const trim = j => (j||[]).slice(-40);
 
 /* Fetch the latest copy before changing the queue or holder, so two people acting at once don't clobber each other. */
@@ -874,14 +895,27 @@ async function fresh(b){ const s = await bookRef(b.id).get(); return s.exists ? 
 async function lendTo(b, p, kind, fromName){
   const cur = await fresh(b); if(!cur){ toast("That book was removed."); return; }
   const wl = (cur.waitlist||[]).filter(x=>x.id!==p.id);
-  const fields = {status:"borrowed", borrowerId:p.id, borrowerName:p.name, borrowerBlock:p.block||"", borrowerRoom:p.room||"", borrowerPhone:p.phone||"",
+  const fields = {status:"borrowed", borrowerId:p.id, borrowerName:p.name, borrowerBlock:p.block||"", borrowerRoom:p.room||"", borrowerPhone:p.phone||"", borrowerEmail:p.email||"",
     requestedAt:null, borrowedAt:Date.now(), dueAt:Date.now()+LOAN_DAYS*864e5, waitlist:wl,
     journey:trim([...(cur.journey||[]), {kind, from:fromName, to:p.name, at:Date.now()}])};
   if (kind==="passed"){
     fields.ownerAlert = `${fromName} passed it to ${p.name} (${where(p.block,p.room)})`;
     fields.timesBorrowed = (cur.timesBorrowed||0)+1;
   }
-  return write(()=>bookRef(b.id).update(fields), kind==="passed" ? `Passed to ${p.name}` : `Lent to ${p.name}`);
+  const ok = await write(()=>bookRef(b.id).update(fields), kind==="passed" ? `Passed to ${p.name}` : `Lent to ${p.name}`);
+  if (ok){
+    const T = `"${cur.title}"`, due = fmtDate(fields.dueAt);
+    if (kind==="passed"){
+      sendEmail(cur.ownerEmail, cur.ownerName, `${fromName} passed ${T} to ${p.name}`,
+        `${fromName} has passed your book ${T} to ${p.name} (${where(p.block,p.room)}). It's due back on ${due}.`, b.id);
+      sendEmail(p.email, p.name, `${fromName} passed you ${T}`,
+        `${fromName} has handed you ${T}, which belongs to ${cur.ownerName||"a fellow Mican"}. Please return it or pass it on by ${due}.`, b.id);
+    } else {
+      sendEmail(p.email, p.name, `You've got ${T}`,
+        `${cur.ownerName||"The owner"} has lent you ${T}. Please return it or pass it on by ${due}.`, b.id);
+    }
+  }
+  return ok;
 }
 
 function journeyEl(b, isOwner){
@@ -1007,11 +1041,19 @@ function fillBook(b){
       if (next) acts.append(A(`Lend to ${next.name}`, ()=>lendTo(b, next, "lent", "You"), "btn primary"));
     }
     if (b.status==="requested"){
-      acts.append(A("Decline", ()=>write(()=>bookRef(b.id).update(clearLoan()), "Request declined")),
+      acts.append(A("Decline", async ()=>{
+          const cur = await fresh(b); if(!cur) return;
+          const ok = await write(()=>bookRef(b.id).update(clearLoan()), "Request declined");
+          if (ok) sendEmail(cur.borrowerEmail, cur.borrowerName, `About "${cur.title}"`,
+            `${cur.ownerName||"The owner"} can't lend "${cur.title}" right now. Have a look at what else is on the shelf!`, b.id);
+        }),
         A("Mark handed over", async ()=>{
           const cur = await fresh(b); if(!cur) return;
-          write(()=>bookRef(b.id).update({status:"borrowed",borrowedAt:Date.now(),dueAt:Date.now()+LOAN_DAYS*864e5,
+          const due = Date.now()+LOAN_DAYS*864e5;
+          const ok = await write(()=>bookRef(b.id).update({status:"borrowed",borrowedAt:Date.now(),dueAt:due,
             journey:trim([...(cur.journey||[]),{kind:"lent",from:cur.ownerName||"Owner",to:cur.borrowerName||"Someone",at:Date.now()}])}), "Marked as borrowed");
+          if (ok) sendEmail(cur.borrowerEmail, cur.borrowerName, `You've got "${cur.title}"`,
+            `${cur.ownerName||"The owner"} has marked "${cur.title}" as handed over to you. Please return it or pass it on by ${fmtDate(due)}. Happy reading!`, b.id);
         }, "btn primary"));
     }
     if (b.status==="borrowed" || b.status==="returning"){
@@ -1026,7 +1068,11 @@ function fillBook(b){
   } else if (isHolder){
     if (b.status==="requested") acts.append(A("Cancel request", ()=>write(()=>bookRef(b.id).update(clearLoan()), "Request cancelled")));
     if (b.status==="borrowed"){
-      acts.append(A(`Returned to ${ownerName}`, ()=>write(()=>bookRef(b.id).update({status:"returning"}), "Marked as returned")));
+      acts.append(A(`Returned to ${ownerName}`, async ()=>{
+        const ok = await write(()=>bookRef(b.id).update({status:"returning"}), "Marked as returned");
+        if (ok) sendEmail(b.ownerEmail, b.ownerName, `${state.profile?.name || b.borrowerName || "Your borrower"} returned "${b.title}"`,
+          `${state.profile?.name || b.borrowerName || "Your borrower"} says they've returned "${b.title}" to you. Open the shelf and tap "It's back with me" once you have it.`, b.id);
+      }));
       if (passOn && next) acts.append(A(`Passed to ${next.name}`, ()=>{
         if (confirm(`Hand "${b.title}" to ${next.name}? ${ownerName} will see that it's with them now.`)) lendTo(b, next, "passed", state.profile?.name || b.borrowerName || "Borrower");
       }, "btn hot"));
@@ -1161,13 +1207,22 @@ function reviewForm(b, mine){
   return form;
 }
 
-function clearLoan(){ return {status:"available",borrowerId:null,borrowerName:null,borrowerBlock:null,borrowerRoom:null,borrowerPhone:null,requestedAt:null,borrowedAt:null,dueAt:null}; }
+function clearLoan(){ return {status:"available",borrowerId:null,borrowerName:null,borrowerBlock:null,borrowerRoom:null,borrowerPhone:null,borrowerEmail:null,requestedAt:null,borrowedAt:null,dueAt:null}; }
 
 function joinLine(b){
   needProfile(async ()=>{
     const cur = await fresh(b).catch(()=>null); if(!cur) return;
     if ((cur.waitlist||[]).some(p=>p.id===state.uid) || cur.borrowerId===state.uid){ openBook(b.id); return; }
-    await write(()=>bookRef(b.id).update({waitlist:[...(cur.waitlist||[]), me_()]}), "You're in line");
+    const ok = await write(()=>bookRef(b.id).update({waitlist:[...(cur.waitlist||[]), me_()]}), "You're in line");
+    if (ok && !(cur.waitlist||[]).length){
+      const nm = state.profile.name, T = `"${cur.title}"`;
+      if (cur.status==="borrowed" && cur.passOn!==false)
+        sendEmail(cur.borrowerEmail, cur.borrowerName, `${nm} wants ${T} next`,
+          `${nm} (${where(state.profile.block,state.profile.room)}) would like to read ${T} after you. When you're done, hand it over and tap "Passed to ${nm}" on the shelf.`, b.id);
+      else
+        sendEmail(cur.ownerEmail, cur.ownerName, `${nm} is waiting for ${T}`,
+          `${nm} (${where(state.profile.block,state.profile.room)}) has joined the line for ${T}.`, b.id);
+    }
     openBook(b.id);
   });
 }
@@ -1189,7 +1244,9 @@ function requestBook(b){
     const p = state.profile;
     const cur = await fresh(b).catch(()=>null);
     if (cur && cur.status!=="available"){ toast("Someone asked for it just before you. Join the line instead."); openBook(b.id); return; }
-    await write(()=>bookRef(b.id).update({status:"requested",borrowerId:state.uid,borrowerName:p.name,borrowerBlock:p.block||"",borrowerRoom:p.room||"",borrowerPhone:p.phone||"",requestedAt:Date.now()}), "Request sent");
+    await write(()=>bookRef(b.id).update({status:"requested",borrowerId:state.uid,borrowerName:p.name,borrowerBlock:p.block||"",borrowerRoom:p.room||"",borrowerPhone:p.phone||"",borrowerEmail:myEmail(),requestedAt:Date.now()}), "Request sent");
+    if (cur) sendEmail(cur.ownerEmail, cur.ownerName, `${p.name} wants to borrow "${cur.title}"`,
+      `${p.name} (${where(p.block,p.room)}) has asked to borrow "${cur.title}" on The MICA Shelf. Hand it over when you can, then tap "Mark handed over" on the shelf.`, b.id);
     openBook(b.id);
   });
 }
@@ -1202,16 +1259,18 @@ function openProfile(then){
   const block = el("input",{name:"block",maxlength:40,value:p.block||"",placeholder:"e.g. Hostel B"});
   const room = el("input",{name:"room",maxlength:12,value:p.room||"",placeholder:"e.g. 214"});
   const phone = el("input",{name:"phone",type:"tel",maxlength:16,value:p.phone||"",placeholder:"e.g. 98765 43210",autocomplete:"tel"});
+  const mail = el("input",{type:"checkbox",name:"emailAlerts"}); mail.checked = p.emailAlerts !== false;
   form.append(
     el("label",{},["Your name",name]),
     el("div",{class:"pair"},[el("label",{},["Hostel or block",block]), el("label",{},["Room",room])]),
     el("label",{},["WhatsApp number (recommended)",phone]),
-    el("span",{class:"hint",text:"Your name and room show on books you lend and borrow. Your WhatsApp number is only used for the \"Message on WhatsApp\" buttons, so people can tell you about requests, but anyone signed in to the shelf could find it."}),
+    el("label",{class:"check"},[mail, el("span",{text:`Email me at ${state.email||"my Google address"} when someone asks for, returns or passes on a book.`})]),
+    el("span",{class:"hint",text:"Your name and room show on books you lend and borrow. Your WhatsApp number and email are only used to tell you about requests, but anyone signed in to the shelf could find them."}),
     el("div",{class:"actions"},[el("button",{class:"btn",type:"button",onclick:()=>$("#dlg").close(),text:"Cancel"}), el("button",{class:"btn primary",type:"submit",text:"Save details"})])
   );
   form.onsubmit = async e=>{
     e.preventDefault();
-    const data = {name:name.value.trim(), block:block.value.trim(), room:room.value.trim(), phone:phone.value.trim()};
+    const data = {name:name.value.trim(), block:block.value.trim(), room:room.value.trim(), phone:phone.value.trim(), emailAlerts:mail.checked};
     if (!data.name) return;
     if (data.phone && !waNumber(data.phone)){ toast("That number doesn't look right. Use a 10-digit mobile number."); return; }
     const ok = await write(()=>state.db.doc(`users/${state.uid}`).set(data), "Details saved");
@@ -1219,7 +1278,7 @@ function openProfile(then){
       state.profile = data;
       // keep the owner details on every book you've listed up to date
       state.books.filter(b=>b.ownerId===state.uid).forEach(b=>{
-        bookRef(b.id).update({ownerName:data.name, ownerBlock:data.block, ownerRoom:data.room, ownerPhone:data.phone}).catch(()=>{});
+        bookRef(b.id).update({ownerName:data.name, ownerBlock:data.block, ownerRoom:data.room, ownerPhone:data.phone, ownerEmail: data.emailAlerts ? state.email : ""}).catch(()=>{});
       });
       $("#dlg").close(); if (then) then();
     }
@@ -1295,7 +1354,7 @@ function openAdd(existing){
       e.preventDefault();
       const p = state.profile;
       const fields = {title:title.value.trim(), author:author.value.trim(), genre: genre.value==="Other" ? tidyGenre(otherGenre.value) : genre.value, note:note.value.trim(), passOn:passOn.checked,
-                      ownerName:p.name, ownerBlock:p.block||"", ownerRoom:p.room||"", ownerPhone:p.phone||""};
+                      ownerName:p.name, ownerBlock:p.block||"", ownerRoom:p.room||"", ownerPhone:p.phone||"", ownerEmail:myEmail()};
       if (!fields.title) return;
       const v = Date.now();
       if (typeof photo === "string"){ fields.hasPhoto = true; fields.photoV = v; }
