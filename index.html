@@ -55,7 +55,9 @@ h1{font-family:var(--display);font-weight:400;font-size:clamp(2.9rem,9vw,6.2rem)
 /* fresh strip */
 .fresh{margin-bottom:28px}
 .fresh h2,.shelf-head h2{font-family:var(--display);font-weight:400;font-size:2rem;line-height:1;margin:0 0 16px}
-.covers{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:22px}
+.covers{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(260px,300px);gap:22px;overflow-x:auto;scroll-snap-type:x proximity;padding:6px 6px 14px;scrollbar-width:none}
+.covers .card{scroll-snap-align:start}
+.covers{scroll-padding-inline:6px}
 .card{display:flex;gap:14px;align-items:flex-start;text-align:left;background:var(--panel);border:2.5px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 6px 0 var(--shadow);cursor:pointer;transition:transform .15s}
 .card:nth-child(1){transform:rotate(-1.5deg)} .card:nth-child(2){transform:rotate(1deg)} .card:nth-child(3){transform:rotate(-.6deg)}
 .card:hover{transform:rotate(0) translateY(-4px)}
@@ -86,12 +88,29 @@ label.toggle input{width:18px;height:18px;accent-color:var(--accent)}
 
 /* the shelf */
 .shelf{
-  display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 6px;padding:0 10px;
+  display:flex;flex-wrap:nowrap;align-items:flex-end;gap:12px 6px;padding:0 10px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scrollbar-width:none;
   background-image:
     repeating-linear-gradient(to bottom, transparent 0 200px, #8DBF5C 200px 202px, var(--board-hi) 202px 204px, var(--board) 204px 210px, #9C6B3F 210px 212px);
   min-height:212px;
 }
-.slot{height:200px;display:flex;align-items:flex-end}
+.slot{height:200px;display:flex;align-items:flex-end;flex:none;scroll-snap-align:start}
+.shelf::-webkit-scrollbar,.covers::-webkit-scrollbar{display:none}
+.shelf-row{margin-top:18px}
+.shelf-row h3{font-family:var(--display);font-weight:400;font-size:1.25rem;margin:0 0 8px 4px}
+.shelf-row h3 span{font-family:var(--sans);font-size:.8rem;font-weight:800;color:var(--muted)}
+.rail{position:relative}
+.arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:3;width:44px;height:44px;border-radius:50%;border:2.5px solid var(--line);background:var(--panel);color:var(--ink);font-size:1.7rem;line-height:1;font-weight:700;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 0 var(--shadow);padding:0 0 3px}
+.arrow:hover{background:var(--chip)}
+.arrow.prev{left:-12px}.arrow.next{right:-12px}
+.shelf-row .arrow{top:44%}
+.gr{display:inline-block;margin-top:6px;font-weight:800;font-size:.88rem;color:var(--go);text-decoration:underline;text-underline-offset:3px}
+.blurb{border:2.5px solid var(--line);border-radius:12px;padding:10px 14px}
+.blurb summary{cursor:pointer;font-weight:800}
+.blurb p{margin:8px 0 0;font-size:.95rem;line-height:1.6;white-space:pre-wrap}
+.isbn-box{display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:14px;background:var(--chip);border:2.5px dashed var(--line)}
+.isbn-row{display:flex;gap:8px;flex-wrap:wrap}
+.isbn-row input{flex:1 1 160px;min-width:0}
+.scan-video{width:100%;max-height:240px;border-radius:12px;background:#000;object-fit:cover}
 .spine{
   position:relative;border:2.5px solid var(--line);border-bottom:none;cursor:pointer;border-radius:6px 6px 0 0;padding:16px 0;
   writing-mode:vertical-rl;display:flex;align-items:center;justify-content:space-between;gap:10px;
@@ -161,7 +180,9 @@ form.fields textarea{min-height:100px;resize:vertical}
   .pair{grid-template-columns:1fr}
   .cv.lg{width:84px;height:122px}.cv.lg .ct{font-size:1rem}
   .dlg h2{font-size:1.7rem}
-  .covers{grid-auto-flow:column;grid-template-columns:none;grid-auto-columns:82%;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 10px 12px 4px;margin:0 -14px 0 0}
+  .covers{grid-auto-columns:82%;scroll-snap-type:x mandatory}
+  .arrow{width:38px;height:38px;font-size:1.4rem}
+  .arrow.prev{left:-8px}.arrow.next{right:-8px}
   .card{transform:none!important;scroll-snap-align:start}
 }
 
@@ -426,6 +447,10 @@ function coverEl(b, size){
   const node = el("div",{class:"cv "+size,"aria-hidden":"true",style:`background:${pat}, ${bg};color:${fg}`},[
     el("span",{class:"ct",text:b.title}), el("span",{class:"ca",text:b.author||""})
   ]);
+  if (!b.hasPhoto && b.coverUrl){
+    const img = el("img",{src:b.coverUrl,alt:"",loading:"lazy",referrerpolicy:"no-referrer"});
+    img.onload = ()=>{ if (img.naturalWidth > 2){ node.classList.add("photo"); node.replaceChildren(img); } };
+  }
   if (b.hasPhoto && state.db){
     const show = d => { if (d){ node.classList.add("photo"); node.replaceChildren(el("img",{src:d,alt:""})); } };
     const key = b.id + ":" + (b.photoV||0);
@@ -583,6 +608,35 @@ function buildGenreFilter(){
   s.replaceChildren(el("option",{value:"",text:"All genres"}), ...names.map(g=>el("option",{value:g,text:`${g} (${counts[g]})`})));
   s.value = names.includes(cur) ? cur : "";
 }
+/* Wrap a horizontal scroller with left/right arrow buttons. */
+function withArrows(scroller, label){
+  const prev = el("button",{class:"arrow prev",type:"button","aria-label":`Scroll ${label} left`,text:"‹"});
+  const next = el("button",{class:"arrow next",type:"button","aria-label":`Scroll ${label} right`,text:"›"});
+  const step = dir => scroller.scrollBy({left: dir * Math.max(200, scroller.clientWidth * 0.8), behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
+  prev.onclick = () => step(-1); next.onclick = () => step(1);
+  const sync = () => {
+    const max = scroller.scrollWidth - scroller.clientWidth - 2;
+    prev.hidden = scroller.scrollLeft <= 12; next.hidden = scroller.scrollLeft >= max - 10;
+  };
+  scroller.addEventListener("scroll", sync, {passive:true});
+  requestAnimationFrame(sync); setTimeout(sync, 300);
+  if ("ResizeObserver" in window) new ResizeObserver(sync).observe(scroller);
+  return el("div",{class:"rail"},[prev, scroller, next]);
+}
+function spineEl(b){
+  const [bg,fg,acc] = pal(b);
+  const h = 160 + hash((b.title||"")+(b.author||""))%27;
+  const w = Math.min(64, Math.max(40, 30 + (b.title||"").length*1.1));
+  const cls = "spine" + (b.status==="borrowed"||b.status==="returning" ? " out" : "") + (b.status==="requested" ? " req" : "");
+  const label = `${b.title} by ${b.author||"unknown author"}, ${statusWord(b)}`;
+  return el("div",{class:"slot"},[
+    el("button",{class:cls,type:"button","aria-label":label,title:b.title,style:`height:${h}px;width:${w}px;color:${fg};background:linear-gradient(to bottom, transparent 8px, ${acc} 8px 12px, transparent 12px calc(100% - 18px), ${acc} calc(100% - 18px) calc(100% - 14px), transparent calc(100% - 14px)), ${bg}`,onclick:()=>openBook(b.id)},[
+      el("span",{class:"flag","aria-hidden":"true"}),
+      el("span",{class:"t",text:b.title}),
+      el("span",{class:"a",text:(b.author||"").trim().split(/\s+/).pop()})
+    ])
+  ]);
+}
 function renderShelf(){
   buildGenreFilter();
   const box = $("#shelf"); box.replaceChildren();
@@ -611,22 +665,16 @@ function renderShelf(){
   if (!list.length){
     box.append(el("div",{class:"empty"},[el("strong",{text:"No books match"}),el("span",{text:"Try a different search or clear the filters."})])); return;
   }
-  const shelf = el("div",{class:"shelf"});
-  for (const b of list){
-    const [bg,fg,acc] = pal(b);
-    const h = 168 + hash((b.title||"")+(b.author||""))%28;
-    const w = Math.min(64, Math.max(40, 30 + (b.title||"").length*1.1));
-    const cls = "spine" + (b.status==="borrowed"||b.status==="returning" ? " out" : "") + (b.status==="requested" ? " req" : "");
-    const label = `${b.title} by ${b.author||"unknown author"}, ${statusWord(b)}`;
-    shelf.append(el("div",{class:"slot"},[
-      el("button",{class:cls,type:"button","aria-label":label,title:b.title,style:`height:${h}px;width:${w}px;color:${fg};background:linear-gradient(to bottom, transparent 8px, ${acc} 8px 12px, transparent 12px calc(100% - 18px), ${acc} calc(100% - 18px) calc(100% - 14px), transparent calc(100% - 14px)), ${bg}`,onclick:()=>openBook(b.id)},[
-        el("span",{class:"flag","aria-hidden":"true"}),
-        el("span",{class:"t",text:b.title}),
-        el("span",{class:"a",text:(b.author||"").trim().split(/\s+/).pop()})
-      ])
+  const groups = {};
+  list.forEach(b=>{ const k = b.genre || "Other"; (groups[k] = groups[k] || []).push(b); });
+  const names = Object.keys(groups).sort((x,y)=>groups[y].length-groups[x].length || x.localeCompare(y));
+  names.forEach(name=>{
+    const row = el("div",{class:"shelf"}); groups[name].forEach(b=>row.append(spineEl(b)));
+    box.append(el("section",{class:"shelf-row"},[
+      el("h3",{},[name, el("span",{text:` ${groups[name].length}`})]),
+      withArrows(row, name)
     ]));
-  }
-  box.append(shelf);
+  });
 }
 function reviewsFor(id){ return (state.reviews[id]||[]).slice().sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0)); }
 function ratingStats(revs){ const r = revs.filter(x=>x.rating>0); return {count:r.length, avg: r.length ? r.reduce((s,x)=>s+x.rating,0)/r.length : 0}; }
@@ -641,14 +689,14 @@ function rateLine(id){
 }
 function renderFresh(){
   const f = $("#fresh"); f.replaceChildren();
-  const fresh = state.books.filter(b=>b.status==="available").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,3);
+  const fresh = state.books.filter(b=>b.status==="available").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,10);
   if (!fresh.length) return;
   const grid = el("div",{class:"covers"});
   fresh.forEach(b=>grid.append(el("button",{class:"card",type:"button",onclick:()=>openBook(b.id),"aria-label":`${b.title}, available`},[
     coverEl(b,"sm"),
     el("div",{class:"txt"},[el("b",{text:b.title}), el("span",{text:`from ${b.ownerName||"a MICA reader"}`}), rateLine(b.id), b.note?el("p",{text:b.note}):null])
   ])));
-  f.append(el("section",{class:"fresh"},[el("h2",{text:"Fresh on the shelf"}), grid]));
+  f.append(el("section",{class:"fresh"},[el("h2",{text:"Fresh on the shelf"}), withArrows(grid, "new books")]));
 }
 function statusWord(b){
   return {available:"available",requested:"requested",borrowed:"borrowed",returning:"being returned"}[b.status]||"available";
@@ -904,7 +952,8 @@ function fillBook(b){
 
   body.append(el("div",{class:"dlg-head"},[
     coverEl(b,"lg"),
-    el("div",{},[el("h2",{text:b.title}), el("p",{class:"by",text:[b.author, b.genre].filter(Boolean).join(", ")}), rateLine(b.id)]),
+    el("div",{},[el("h2",{text:b.title}), el("p",{class:"by",text:[b.author, b.genre].filter(Boolean).join(", ")}), rateLine(b.id),
+      el("a",{class:"gr",href:goodreadsUrl(b),target:"_blank",rel:"noopener",text:"See it on Goodreads ↗"})]),
     closeBtn()
   ]));
   const revs = reviewsFor(b.id);
@@ -913,6 +962,7 @@ function fillBook(b){
   body.append(el("div",{class:"dtabs",role:"tablist"},[tabBtn("about","About"), tabBtn("reviews", `Reviews${revs.length?` (${revs.length})`:""}`)]));
   if (state.bookTab==="reviews"){ renderReviews(body, b, revs); return; }
   if (b.note) body.append(el("p",{class:"note",text:b.note}));
+  if (b.blurb) body.append(el("details",{class:"blurb"},[el("summary",{text:"About this book"}), el("p",{text:b.blurb})]));
   body.append(el("dl",{class:"facts"},[
     el("dt",{text:"Owner"}), el("dd",{text:isOwner ? "You" : (b.ownerName||"A MICA reader")}),
     el("dt",{text:"Owner's room"}), el("dd",{text:where(b.ownerBlock,b.ownerRoom)}),
@@ -1043,6 +1093,73 @@ function fillBook(b){
   if (!isHolder && !isOwner && pos>=0) body.append(el("p",{class:"hint",text: pos===0 ? (passOn ? "You're next. The current reader can hand it straight to you." : `You're next. ${ownerName} will lend it to you when it's back.`) : `You're #${pos+1} in line.`}));
   if (acts.children.length) body.append(acts);
 }
+function goodreadsUrl(b){
+  const q = b.isbn ? b.isbn : [b.title, b.author].filter(Boolean).join(" ");
+  return "https://www.goodreads.com/search?q=" + encodeURIComponent(q);
+}
+
+/* ---------- ISBN lookup + barcode scanning ---------- */
+function cleanIsbn(v){
+  const x = (v||"").toUpperCase().replace(/[^0-9X]/g,"");
+  return (x.length===13 && /^\d{13}$/.test(x)) || (x.length===10 && /^\d{9}[\dX]$/.test(x)) ? x : "";
+}
+const GENRE_HINTS = [
+  [/business|management|leadership|strategy/i,"Business & strategy"],[/marketing|advertis/i,"Marketing & advertising"],
+  [/brand/i,"Branding"],[/economic|finance|invest|money/i,"Economics & finance"],[/entrepreneur|startup/i,"Entrepreneurship & startups"],
+  [/design|art\b|arts/i,"Design & art"],[/photograph|film|cinema/i,"Photography & film"],[/journalis/i,"Journalism"],
+  [/media|communication/i,"Media & communication"],[/biograph|memoir|autobiograph/i,"Biography & memoir"],[/histor/i,"History"],
+  [/politic|current affairs/i,"Politics & current affairs"],[/philosoph/i,"Philosophy"],[/psycholog/i,"Psychology"],
+  [/self-help|self help|personal development|success/i,"Self-help"],[/poetry|poems/i,"Poetry"],[/drama|plays/i,"Plays & screenplays"],
+  [/comic|graphic novel/i,"Graphic novels & comics"],[/manga/i,"Manga"],[/young adult|juvenile/i,"Young adult"],
+  [/fantasy/i,"Fantasy"],[/science fiction/i,"Science fiction"],[/thriller|mystery|suspense|detective/i,"Mystery & thriller"],
+  [/crime/i,"Crime"],[/romance/i,"Romance"],[/horror/i,"Horror"],[/short stor/i,"Short stories"],[/classic/i,"Classics"],
+  [/mytholog/i,"Mythology"],[/religio|spiritual/i,"Religion & spirituality"],[/travel/i,"Travel"],[/cook|food/i,"Food & cooking"],
+  [/sport|cricket|football/i,"Sports"],[/health|fitness|wellness/i,"Health & wellness"],[/technolog|computer|artificial intelligence/i,"Technology & AI"],
+  [/science|nature/i,"Science & nature"],[/social|sociolog|culture/i,"Culture & society"],[/fiction|novel/i,"Fiction"]
+];
+function guessGenre(cats){
+  const text = (cats||[]).join(" | ");
+  for (const [re, g] of GENRE_HINTS) if (re.test(text)) return g;
+  return "";
+}
+async function lookupIsbn(isbn){
+  // Google Books first, then Open Library
+  try{
+    const r = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+    if (r.ok){
+      const j = await r.json(), v = j.items && j.items[0] && j.items[0].volumeInfo;
+      if (v && v.title){
+        const img = v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail);
+        return { title: v.subtitle && v.title.length < 40 ? `${v.title}: ${v.subtitle}` : v.title,
+          author: (v.authors||[]).join(", "), genre: guessGenre(v.categories),
+          blurb: (v.description||"").replace(/<[^>]+>/g,"").slice(0,1200),
+          coverUrl: img ? img.replace(/^http:/,"https:").replace("&edge=curl","") : "" };
+      }
+    }
+  }catch(e){}
+  try{
+    const r = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
+    if (r.ok){
+      const j = await r.json(), v = j[`ISBN:${isbn}`];
+      if (v && v.title) return { title: v.title, author: (v.authors||[]).map(a=>a.name).join(", "),
+        genre: guessGenre((v.subjects||[]).map(x=>x.name)), blurb: "",
+        coverUrl: (v.cover && (v.cover.medium || v.cover.large)) || "" };
+    }
+  }catch(e){}
+  return null;
+}
+let zxingLoading = null;
+function loadZxing(){
+  if (window.ZXing) return Promise.resolve();
+  if (!zxingLoading) zxingLoading = new Promise((res, rej)=>{
+    const sc = document.createElement("script");
+    sc.src = "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js";
+    sc.onload = res; sc.onerror = ()=>{ zxingLoading = null; rej(new Error("load")); };
+    document.head.append(sc);
+  });
+  return zxingLoading;
+}
+
 function renderReviews(body, b, revs){
   const wrap = el("div",{class:"reviews"});
   if (state.reviewsError){
@@ -1255,18 +1372,66 @@ function openAdd(existing){
     note.value = b.note||"";
     const passOn = el("input",{type:"checkbox",name:"passOn"}); passOn.checked = b.passOn !== false;
 
+    // quick add by ISBN / barcode
+    let found = { isbn: b.isbn || "", blurb: b.blurb || "", coverUrl: b.coverUrl || "" };
+    const isbnIn = el("input",{name:"isbn",inputmode:"numeric",maxlength:20,placeholder:"e.g. 9780143028574",value:b.isbn||"",autocomplete:"off"});
+    const isbnMsg = el("span",{class:"hint",text:"Type the number above the barcode on the back, or scan it."});
+    const video = el("video",{class:"scan-video",playsinline:true,muted:true,hidden:true});
+    let reader = null;
+    const stopScan = () => { try{ reader && reader.reset(); }catch(e){} reader = null; video.hidden = true; scanBtn.textContent = "Scan barcode"; };
+    const fillFrom = async isbn => {
+      isbnMsg.textContent = "Looking it up…";
+      const info = await lookupIsbn(isbn);
+      if (!info){ isbnMsg.textContent = "Couldn't find that one. Fill in the details yourself below."; found.isbn = isbn; return; }
+      found = { isbn, blurb: info.blurb, coverUrl: info.coverUrl };
+      title.value = info.title; if (info.author) author.value = info.author;
+      if (info.genre && GENRES.includes(info.genre)){ genre.value = info.genre; syncOther(); }
+      if (photo === undefined && !b.hasPhoto && info.coverUrl) paintPhoto(info.coverUrl, true);
+      isbnMsg.textContent = `Found "${info.title}". Check the details, then add why people should read it.`;
+    };
+    const lookBtn = el("button",{class:"btn",type:"button",text:"Look up",onclick:()=>{
+      const v = cleanIsbn(isbnIn.value); if (!v){ isbnMsg.textContent = "That doesn't look like an ISBN. It's 10 or 13 digits."; return; }
+      fillFrom(v);
+    }});
+    isbnIn.addEventListener("keydown", e=>{ if (e.key==="Enter"){ e.preventDefault(); lookBtn.click(); } });
+    const scanBtn = el("button",{class:"btn hot",type:"button",text:"Scan barcode",onclick:async ()=>{
+      if (reader){ stopScan(); return; }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ isbnMsg.textContent = "This browser can't use the camera. Type the ISBN instead."; return; }
+      scanBtn.textContent = "Starting camera…";
+      try{ await loadZxing(); }catch(e){ isbnMsg.textContent = "Couldn't load the scanner. Type the ISBN instead."; scanBtn.textContent = "Scan barcode"; return; }
+      try{
+        const hints = new Map(); hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A]);
+        reader = new ZXing.BrowserMultiFormatReader(hints);
+        video.hidden = false; scanBtn.textContent = "Stop scanning";
+        isbnMsg.textContent = "Point the camera at the barcode on the back of the book.";
+        await reader.decodeFromConstraints({video:{facingMode:"environment"}}, video, (res)=>{
+          if (!res) return;
+          const v = cleanIsbn(res.getText()); if (!v) return;
+          stopScan(); isbnIn.value = v; if (navigator.vibrate) navigator.vibrate(60); fillFrom(v);
+        });
+      }catch(e){ stopScan(); isbnMsg.textContent = "Couldn't open the camera. Allow camera access, or type the ISBN."; }
+    }});
+    $("#dlg").addEventListener("close", stopScan, {once:true});
+    const isbnField = el("div",{class:"isbn-box"},[
+      el("b",{text:"Quick add with the ISBN"}),
+      el("div",{class:"isbn-row"},[isbnIn, lookBtn, scanBtn]),
+      video, isbnMsg
+    ]);
+
     // photo: undefined = unchanged, null = remove, string = new photo
     let photo;
     const preview = el("div",{class:"ph-preview"});
     const fileIn = el("input",{type:"file",accept:"image/*",class:"ph-input",id:"phIn"});
     const pickLbl = el("label",{class:"btn",for:"phIn"});
     const removeBtn = el("button",{class:"btn link",type:"button",text:"Remove photo"});
-    const paintPhoto = d => {
-      preview.replaceChildren(d ? el("img",{src:d,alt:"Photo of the book"}) : el("span",{text:"No photo yet. We'll make a cover from the title."}));
-      pickLbl.textContent = d ? "Change photo" : "Add a photo";
-      removeBtn.hidden = !d;
+    const paintPhoto = (d, online) => {
+      const ph = () => el("span",{text:"No photo yet. We'll make a cover from the title."});
+      if (d){ const im = el("img",{src:d,alt:"Photo of the book",referrerpolicy:"no-referrer"}); im.onerror = ()=>preview.replaceChildren(ph()); preview.replaceChildren(im); }
+      else preview.replaceChildren(ph());
+      pickLbl.textContent = d && !online ? "Change photo" : "Add your own photo";
+      removeBtn.hidden = !d || online;
     };
-    paintPhoto(null);
+    paintPhoto(!b.hasPhoto && b.coverUrl ? b.coverUrl : null, true);
     if (b.hasPhoto) loadCover(b).then(d=>{ if (photo===undefined) paintPhoto(d); });
     fileIn.addEventListener("change", async ()=>{
       const f = fileIn.files && fileIn.files[0]; if (!f) return;
@@ -1282,6 +1447,7 @@ function openAdd(existing){
         el("span",{class:"hint",text:"Snap the cover, or the book on your shelf."})])])
     ]);
     form.append(
+      isbnField,
       el("label",{},["Title",title]),
       el("div",{class:"pair"},[el("label",{},["Author",author]), el("label",{},["Genre",genre])]),
       otherWrap,
@@ -1295,6 +1461,7 @@ function openAdd(existing){
       e.preventDefault();
       const p = state.profile;
       const fields = {title:title.value.trim(), author:author.value.trim(), genre: genre.value==="Other" ? tidyGenre(otherGenre.value) : genre.value, note:note.value.trim(), passOn:passOn.checked,
+                      isbn: cleanIsbn(isbnIn.value) || found.isbn || "", blurb: found.blurb || "", coverUrl: found.coverUrl || "",
                       ownerName:p.name, ownerBlock:p.block||"", ownerRoom:p.room||"", ownerPhone:p.phone||""};
       if (!fields.title) return;
       const v = Date.now();
