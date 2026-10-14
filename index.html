@@ -291,6 +291,8 @@ form.fields label.check input{width:20px;height:20px;margin-top:2px;accent-color
 .book-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-6px 0 -2px;font-weight:700;font-size:.88rem;color:var(--muted)}
 .arrow-btn{width:40px;height:40px;border-radius:50%;border:2.5px solid var(--line);background:var(--panel);color:var(--ink);font-size:1.6rem;line-height:1;font-weight:700;display:grid;place-items:center;cursor:pointer;box-shadow:0 3px 0 var(--shadow);padding:0 0 3px}
 .arrow-btn:hover{background:var(--chip)}
+.dlg-head .rate{display:block;margin-top:6px}
+.dlg-head .gr{display:block;width:fit-content;margin-top:12px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -1137,7 +1139,7 @@ function fillBook(b){
   if (acts.children.length) body.append(acts);
 }
 function goodreadsUrl(b){
-  const q = b.isbn ? b.isbn : [b.title, b.author].filter(Boolean).join(" ");
+  const q = b.isbn ? b.isbn : (b.title || "");
   return "https://www.goodreads.com/search?q=" + encodeURIComponent(q);
 }
 
