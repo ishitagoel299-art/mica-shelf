@@ -288,6 +288,9 @@ form.fields label.check input{width:20px;height:20px;margin-top:2px;accent-color
 .vol{display:flex;align-items:center;gap:10px;font-weight:700;font-size:.9rem}
 .vol input{flex:1;accent-color:var(--go)}
 .credit{margin-bottom:40px}
+.book-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-6px 0 -2px;font-weight:700;font-size:.88rem;color:var(--muted)}
+.arrow-btn{width:40px;height:40px;border-radius:50%;border:2.5px solid var(--line);background:var(--panel);color:var(--ink);font-size:1.6rem;line-height:1;font-weight:700;display:grid;place-items:center;cursor:pointer;box-shadow:0 3px 0 var(--shadow);padding:0 0 3px}
+.arrow-btn:hover{background:var(--chip)}
 </style>
 </head>
 <body>
@@ -668,6 +671,7 @@ function renderShelf(){
   const groups = {};
   list.forEach(b=>{ const k = b.genre || "Other"; (groups[k] = groups[k] || []).push(b); });
   const names = Object.keys(groups).sort((x,y)=>groups[y].length-groups[x].length || x.localeCompare(y));
+  state.shelfOrder = names.flatMap(n=>groups[n].map(b=>b.id));
   names.forEach(name=>{
     const row = el("div",{class:"shelf"}); groups[name].forEach(b=>row.append(spineEl(b)));
     box.append(el("section",{class:"shelf-row"},[
@@ -902,6 +906,37 @@ $("#dlg").addEventListener("close",()=>{ state.openId=null; state.reviewEditing=
 $("#dlg").addEventListener("click",e=>{ if(e.target.id==="dlg") $("#dlg").close(); });
 const closeBtn = () => el("button",{class:"close",type:"button","aria-label":"Close",onclick:()=>$("#dlg").close(),text:"×"});
 
+function browseOrder(){
+  const o = state.shelfOrder || [];
+  if (o.includes(state.openId)) return o;
+  return state.books.slice().sort((a,b)=>(a.title||"").localeCompare(b.title||"")).map(b=>b.id);
+}
+function stepBook(dir){
+  const order = browseOrder(); if (order.length < 2) return;
+  const i = order.indexOf(state.openId);
+  const nextId = order[(i + dir + order.length) % order.length];
+  state.passHelp = null; state.replyOpen = null; state.typingIn = null; state.reviewEditing = null;
+  openBook(nextId, state.bookTab);
+  $("#dlg").scrollTop = 0;
+}
+// keyboard ← → and swipe while a book is open
+document.addEventListener("keydown", e=>{
+  const d = $("#dlg");
+  if (!d.open || d.dataset.kind!=="book") return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement||{}).tagName||"")) return;
+  if (e.key==="ArrowLeft"){ e.preventDefault(); stepBook(-1); }
+  if (e.key==="ArrowRight"){ e.preventDefault(); stepBook(1); }
+});
+(()=>{
+  let x0 = null, y0 = 0;
+  const d = $("#dlg");
+  d.addEventListener("touchstart", e=>{ if (d.dataset.kind!=="book" || e.target.closest("textarea,input,.rail,.shelf")){ x0 = null; return; } x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, {passive:true});
+  d.addEventListener("touchend", e=>{
+    if (x0===null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null;
+    if (Math.abs(dx) > 70 && Math.abs(dy) < 50) stepBook(dx < 0 ? 1 : -1);
+  }, {passive:true});
+})();
 function refill(id){ const x = state.books.find(y=>y.id===id); if (x) fillBook(x); }
 function openBook(id, tab){
   const b = state.books.find(x=>x.id===id); if(!b) return;
@@ -950,6 +985,14 @@ function fillBook(b){
   const passOn = b.passOn !== false;
   const now = Date.now();
 
+  const order = browseOrder(), at = order.indexOf(b.id);
+  if (order.length > 1 && at >= 0){
+    body.append(el("div",{class:"book-nav"},[
+      el("button",{class:"arrow-btn",type:"button","aria-label":"Previous book",text:"‹",onclick:()=>stepBook(-1)}),
+      el("span",{text:`${at+1} of ${order.length}${b.genre && state.shelfOrder && state.shelfOrder.includes(b.id) ? " · " + b.genre : ""}`}),
+      el("button",{class:"arrow-btn",type:"button","aria-label":"Next book",text:"›",onclick:()=>stepBook(1)})
+    ]));
+  }
   body.append(el("div",{class:"dlg-head"},[
     coverEl(b,"lg"),
     el("div",{},[el("h2",{text:b.title}), el("p",{class:"by",text:[b.author, b.genre].filter(Boolean).join(", ")}), rateLine(b.id),
